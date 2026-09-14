@@ -1,0 +1,14 @@
+{
+  "name": "quant-os-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

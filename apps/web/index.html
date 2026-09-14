@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-api-base="http://127.0.0.1:8000">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#06080c" />
+  <meta name="description" content="Quant OS — self-hosted multi-asset quant research and paper trading terminal" />
+  <title>Quant OS — Trading Command Center</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">Q</span><span>Quant OS</span><small>v1.0</small></div>
+      <nav>
+        <button class="nav-item active" data-view="terminal"><span>⌁</span>Markets</button>
+        <button class="nav-item" data-view="analytics"><span>◫</span>Analytics</button>
+        <button class="nav-item" data-view="strategies"><span>⌘</span>Strategies</button>
+        <button class="nav-item" data-view="analytics"><span>◇</span>Backtests</button>
+        <button class="nav-item" data-view="analytics"><span>◈</span>Models</button>
+        <button class="nav-item" data-view="analytics"><span>△</span>Risk</button>
+        <button class="nav-item" data-view="analytics"><span>▦</span>Heatmaps</button>
+        <button class="nav-item" data-view="terminal"><span>≋</span>News</button>
+        <button class="nav-item" data-view="academy"><span>?</span>Academy</button>
+      </nav>
+      <div class="sidebar-footer"><span class="mode-dot"></span><div><strong>Paper mode</strong><small>Live execution locked</small></div></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div><span class="eyebrow" id="page-eyebrow">Paper terminal</span><h1 id="page-title">Trading Command Center</h1></div>
+        <div class="top-actions"><span class="demo-badge" id="source-badge">CONNECTING…</span><button class="ghost-button">UTC</button><button class="avatar">QS</button></div>
+      </header>
+      <div class="notice"><strong>Research / paper environment.</strong> Synthetic verification data is explicitly labeled. Live execution remains locked.</div>
+      <div id="app"><div class="loading-panel">Loading terminal…</div></div>
+    </div>
+  </div>
+  <script type="module" src="./dist/dashboard.js"></script>
+</body>
+</html>
