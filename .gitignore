@@ -16,5 +16,6 @@ build/
 *.log
 *.db
 *.sqlite3
+catboost_info/
 node_modules/
 .next/
