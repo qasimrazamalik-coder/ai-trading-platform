@@ -10,6 +10,14 @@ from quant_os_core.agents.council import (
     Stance,
     parse_analyst_json,
 )
+from quant_os_core.agents.exits import (
+    Bar,
+    ExitEvent,
+    ExitManager,
+    InvalidationRule,
+    OpenPosition,
+    RuleKind,
+)
 from quant_os_core.agents.pipeline import EntryDecision, EntryPipeline, StageResult
 from quant_os_core.agents.trade_plan import (
     PlanGovernor,
@@ -24,14 +32,20 @@ __all__ = [
     "ANALYST_JSON_SCHEMA",
     "AnalystCouncil",
     "AnalystReport",
+    "Bar",
     "CouncilDecision",
     "CouncilPolicy",
     "EntryDecision",
     "EntryPipeline",
+    "ExitEvent",
+    "ExitManager",
+    "InvalidationRule",
+    "OpenPosition",
     "PlanGovernor",
     "PlanPolicy",
     "PlanVerdict",
     "RuleAnalyst",
+    "RuleKind",
     "StageResult",
     "Stance",
     "TradePlan",

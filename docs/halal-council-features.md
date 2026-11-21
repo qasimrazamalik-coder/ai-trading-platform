@@ -27,3 +27,33 @@ enlarge what an earlier stage allowed. Every decision is kept in `audit_log`.
 - Crypto is disabled under the default `PK_HANAFI` profile and forex speculation is blocked.
 
 These rules still need sign-off from a qualified mufti before live use.
+
+## Added in the second pass
+
+| Feature | Module |
+|---|---|
+| Reproducible halal ensemble backtest with Deflated Sharpe and PBO gate (report section 9H) | `quant_os_core.strategies.halal_ensemble`, `research/backtests/run_halal_v3.py` |
+| Exit manager: stop, profit target, trailing stop, time stop, machine-checkable invalidation rules | `quant_os_core.agents.exits` |
+| Trade-level simulator that replays the live pipeline, exits and protections over history | `quant_os_core.agents.simulator` |
+| Free data: Alpaca daily bars, SEC EDGAR fundamentals for automatic AAOIFI screening, PSX KMI list loader | `quant_os_core.market_data.free_sources` |
+| Local LLM analysts through Ollama structured outputs (temperature 0, fail closed) | `quant_os_core.agents.ollama` |
+| Triple-barrier labels and walk-forward meta-label filter | `quant_os_core.ml.meta_labeling` |
+
+To reproduce the backtest: on a machine with internet run
+`python research/backtests/run_halal_v3.py fetch`, then `python research/backtests/run_halal_v3.py run`.
+The command exits non-zero when the Deflated Sharpe / PBO gate fails.
+
+## Futures: checked and kept blocked
+
+IIFA Resolution 63 (1/7), 14 May 1992, says deferred-delivery commodity contracts are "not
+permissible in Shariah because of the postponement of the two elements of the exchange", that
+the most prevalent commodity-market contracts (closed out by an opposite contract) are
+"essentially not permissible", that options are not permissible, and that index trading is
+"pure gambling" (https://iifa-aifi.org/en/32438.html). AAOIFI SS21 clauses 3/12-3/14 also
+prohibit futures, options and swaps on shares. The only route the resolution offers is
+restructuring as a *salam* sale, which retail futures markets do not provide. Futures,
+perpetuals, options and CFDs therefore remain blocked by rule R2.
+
+## Not built yet
+
+Paper-trading loop against Alpaca's paper API, Telegram alerts and the Next.js dashboard.
