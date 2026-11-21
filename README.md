@@ -26,6 +26,13 @@ uvicorn quant_os_api.main:app --app-dir apps/api/src --reload
 
 Open `http://127.0.0.1:8000/health`. Capability discovery is available across market data, quant, backtesting, Right-Fit, strategies, ML, regimes, portfolio/risk, analytics, execution and intelligence endpoints. The terminal state is exposed at `/terminal/demo-state`; paper orders use `/paper/orders` and `/paper/account`.
 
+## Plan, guardrails and the local assistant
+
+- `docs/MASTER_PLAN.md` — build plan, backtesting gates and honest return expectations
+- `GUARDRAILS.md` — hard Shariah, risk and AI limits; `AGENTS.md` — agent harness and rules for AI coding assistants
+- `docs/knowledge/` — knowledge base for the local chatbot: `python -m quant_os_core.knowledge --docs docs "question"`
+- Read-only MCP server for AI assistants: `python -m quant_os_core.mcp_server --docs docs`
+
 ## Repository layout
 
 - `apps/api` — FastAPI control plane

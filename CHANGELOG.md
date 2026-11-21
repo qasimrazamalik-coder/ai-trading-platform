@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — halal agent layer (branch feat/halal-council-protections)
+
+### Added
+
+- Shariah gate (AAOIFI SS21 screen, purification, no derivatives/margin/shorting), Freqtrade-style
+  protections, pre-registered trade plans, analyst council and entry pipeline.
+- Exit manager, trade simulator, Alpaca/EDGAR/KMI adapters, Ollama analysts, meta-labelling and
+  the reproducible halal backtest with Deflated Sharpe / PBO gate.
+- Spot crypto (token screen) and day trading (flatten before close, T+1 settlement, intraday and
+  24/7 crypto bars) under the owner-selected profile. Futures stay blocked (IIFA Resolution 63).
+- Local knowledge base and cited RAG chatbot, read-only dual-era MCP server, `docs/MASTER_PLAN.md`,
+  `GUARDRAILS.md` and `AGENTS.md`.
+
 ## 1.0.0 — 2026-09-14
 
 First research + paper-trading release.
