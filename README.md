@@ -28,6 +28,7 @@ Open `http://127.0.0.1:8000/health`. Capability discovery is available across ma
 
 ## Plan, guardrails and the local assistant
 
+- `docs/RUNBOOK.md` — paper trading, alerts, dashboard, kill switch and recovery
 - `docs/MASTER_PLAN.md` — build plan, backtesting gates and honest return expectations
 - `GUARDRAILS.md` — hard Shariah, risk and AI limits; `AGENTS.md` — agent harness and rules for AI coding assistants
 - `docs/knowledge/` — knowledge base for the local chatbot: `python -m quant_os_core.knowledge --docs docs "question"`

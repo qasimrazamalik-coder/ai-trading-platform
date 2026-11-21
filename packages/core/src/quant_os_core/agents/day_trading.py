@@ -14,14 +14,33 @@ from __future__ import annotations
 from collections.abc import Collection
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from quant_os_core.agents.trade_plan import PlanPolicy
 from quant_os_core.instruments import AssetClass
 
 NEW_YORK = ZoneInfo("America/New_York")
+KARACHI = ZoneInfo("Asia/Karachi")
 US_CLOSE = time(16, 0)
+PSX_CLOSE_MON_THU = time(15, 30)  # regular market 09:30-15:30 PKT
+PSX_CLOSE_FRI = time(16, 30)  # Friday second session ends 16:30 PKT
 SESSION_ASSETS: frozenset[AssetClass] = frozenset({AssetClass.EQUITY, AssetClass.ETF})
+
+
+class Market(StrEnum):
+    US = "us"
+    PSX = "psx"  # Pakistan Stock Exchange: T+1 since 9 Feb 2026; Ramadan hours differ
+
+
+def market_for_venue(venue: str) -> Market:
+    return Market.PSX if venue.strip().upper() in {"PSX", "KSE", "XKAR"} else Market.US
+
+
+def _zone_and_close(market: Market, day: date) -> tuple[ZoneInfo, time]:
+    if market is Market.PSX:
+        return KARACHI, PSX_CLOSE_FRI if day.weekday() == 4 else PSX_CLOSE_MON_THU
+    return NEW_YORK, US_CLOSE
 
 
 def _next_business_day(day: date, holidays: Collection[date]) -> date:
@@ -31,37 +50,50 @@ def _next_business_day(day: date, holidays: Collection[date]) -> date:
     return candidate
 
 
-def session_close(asset_class: AssetClass, at: datetime) -> datetime | None:
-    """US close (16:00 New York) on the trade's local date; ``None`` for 24/7 assets."""
+def session_close(
+    asset_class: AssetClass, at: datetime, market: Market = Market.US
+) -> datetime | None:
+    """Session close on the trade's local date (US 16:00 New York; PSX 15:30 or Friday 16:30
+    Karachi); ``None`` for 24/7 assets. Ramadan and irregular PSX sessions are not modelled."""
 
     if at.tzinfo is None:
         raise ValueError("timestamps must be timezone-aware")
     if asset_class not in SESSION_ASSETS:
         return None
-    local_day = at.astimezone(NEW_YORK).date()
-    return datetime.combine(local_day, US_CLOSE, tzinfo=NEW_YORK)
+    zone = KARACHI if market is Market.PSX else NEW_YORK
+    local_day = at.astimezone(zone).date()
+    _, close = _zone_and_close(market, local_day)
+    return datetime.combine(local_day, close, tzinfo=zone)
 
 
 def flatten_time(
-    asset_class: AssetClass, at: datetime, buffer: timedelta = timedelta(minutes=15)
+    asset_class: AssetClass,
+    at: datetime,
+    buffer: timedelta = timedelta(minutes=15),
+    market: Market = Market.US,
 ) -> datetime | None:
     """When a day trade must be closed: ``buffer`` before the session close."""
 
-    close = session_close(asset_class, at)
+    close = session_close(asset_class, at, market)
     return None if close is None else close - buffer
 
 
 def settlement_time(
-    asset_class: AssetClass, traded_at: datetime, holidays: Collection[date] = ()
+    asset_class: AssetClass,
+    traded_at: datetime,
+    holidays: Collection[date] = (),
+    market: Market = Market.US,
 ) -> datetime:
-    """When bought units are settled: at the trade for crypto, T+1 close for US equities."""
+    """When bought units are settled: at the trade for crypto, T+1 close for US and PSX shares."""
 
     if traded_at.tzinfo is None:
         raise ValueError("timestamps must be timezone-aware")
     if asset_class not in SESSION_ASSETS:
         return traded_at
-    trade_day = traded_at.astimezone(NEW_YORK).date()
-    return datetime.combine(_next_business_day(trade_day, holidays), US_CLOSE, tzinfo=NEW_YORK)
+    zone = KARACHI if market is Market.PSX else NEW_YORK
+    settle_day = _next_business_day(traded_at.astimezone(zone).date(), holidays)
+    _, close = _zone_and_close(market, settle_day)
+    return datetime.combine(settle_day, close, tzinfo=zone)
 
 
 def day_trading_policy() -> PlanPolicy:

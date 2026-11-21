@@ -1,0 +1,35 @@
+{
+  "state": "state/trading.db",
+  "board": "state/board.db",
+  "dial": "balanced",
+  "day_trading": false,
+  "timeframe": "1Day",
+  "interval_minutes": 1440,
+  "lookback_days": 150,
+  "alerts": {
+    "ntfy_topic": "replace-with-a-long-private-topic-name",
+    "webhook_url": null
+  },
+  "universe": [
+    {
+      "symbol": "BTC/USD",
+      "asset_class": "crypto",
+      "token_category": "layer1"
+    },
+    {
+      "symbol": "AAPL",
+      "asset_class": "equity",
+      "financials": {
+        "sector": "technology",
+        "market_cap": 3500000000000,
+        "interest_bearing_debt": 100000000000,
+        "interest_bearing_cash_and_securities": 150000000000,
+        "total_revenue": 390000000000,
+        "noncompliant_revenue": 4000000000,
+        "total_assets": 360000000000,
+        "tangible_assets": 340000000000,
+        "shares_outstanding": 15000000000
+      }
+    }
+  ]
+}

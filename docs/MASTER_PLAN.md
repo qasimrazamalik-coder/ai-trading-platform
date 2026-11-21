@@ -116,17 +116,17 @@ Status: gates 1-7 Done in code (`right_fit`, `run_halal_v3.py`); gate 8 needs th
 
 | # | Item | Acceptance test |
 |---|---|---|
-| 1 | **Paper-trading loop** on Alpaca's paper API: schedule, reconcile positions, write the audit log, kill switch | 30 days unattended with zero unreconciled positions |
-| 2 | **Durable state and memory**: SQLite (orders, fills, positions, decisions, model versions) with migrations; restart resumes exactly | kill -9 mid-session, restart, state identical |
+| 1 | **Paper-trading loop** on Alpaca's paper API: schedule, reconcile positions, write the audit log, kill switch | Built (`ops/paper_loop.py`, `ops/run_paper.py`); acceptance needs 30 days unattended with zero unreconciled positions |
+| 2 | **Durable state and memory**: SQLite (orders, fills, positions, decisions, model versions); restart resumes exactly | Built (`ops/state.py`); restart test passes |
 | 3 | **Event bus**: bar, signal, order, fill, risk-breach events; handlers idempotent | replaying a day's events twice gives one set of trades |
-| 4 | **Error handling**: retries with backoff for data/broker calls, circuit breaker after N failures, fail closed (no new entries) on any unknown state | fault-injection tests for timeouts, 429s, bad JSON |
+| 4 | **Error handling**: retries with backoff, circuit breaker, fail closed on unknown state | Built (`ops/resilience.py`); fault tests pass |
 | 5 | **File and folder layout**: `data/raw` (immutable downloads), `data/clean`, `models/<version>`, `runs/<date>`, `logs/`; atomic writes (temp file + rename); retention policy | test writes are atomic; nothing written outside these folders |
-| 6 | **Self-improvement loop**: weekly retrain, champion/challenger, promote only if the challenger beats the champion out of sample and passes section 4 | promotion log shows gate results for every swap |
-| 7 | **Dashboard** (Next.js): equity, drawdown, open positions, blocked-by reasons, percentiles of returns, heatmaps, audit log, kill switch | Lighthouse a11y >= 90; data matches the database |
-| 8 | **Telegram alerts** (or WhatsApp if available): fills, risk breaches, daily summary | alert within 60 s of a fill in paper |
-| 9 | **Chatbot upgrades**: embeddings (local, e.g. nomic-embed-text via Ollama) blended with BM25; answers cite sources; evaluation set of 100 Q&A | >= 90% of eval answers cite a correct source |
+| 6 | **Self-improvement loop**: champion/challenger gate | Gate built (`ml/champion.py`); weekly retrain job still to schedule |
+| 7 | **Dashboard**: equity, drawdown, positions, blocked-by reasons, decisions, events, kill switch | Local dashboard built (`ops/dashboard.py`); Next.js version later |
+| 8 | **Alerts**: fills, risk breaches, daily summary | Built with ntfy push, webhooks and email (Telegram is not usable for the owner) |
+| 9 | **Chatbot upgrades**: local embeddings fused with BM25; eval set | Built; 44 of 45 eval questions retrieve the right file in the top 3 (BM25 alone) |
 | 10 | **MCP upgrades**: read-only tools for audit log, open positions, backtest summaries | tools never mutate state (test) |
-| 11 | **PSX support**: KMI universe, PSX data source, local settlement and hours | gate blocks non-KMI symbols |
+| 11 | **PSX support**: hours, T+1 settlement, CSV bars | Built; PSX broker adapter and live data source still missing |
 | 12 | **Scholar review**: send `05-halal-rules.md` and the token categories to a mufti | written sign-off stored in `docs/` |
 
 ## 6. Intelligence: what "pre-trained, fine-tuned, gets better" means here

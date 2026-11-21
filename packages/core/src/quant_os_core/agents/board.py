@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS reports (
     rationale TEXT NOT NULL, created TEXT NOT NULL, task_id INTEGER
 );
 CREATE INDEX IF NOT EXISTS reports_symbol ON reports(symbol, created);
+CREATE TABLE IF NOT EXISTS grades (
+    report_id INTEGER PRIMARY KEY, source TEXT NOT NULL, role TEXT NOT NULL,
+    correct INTEGER NOT NULL, conviction TEXT NOT NULL, graded TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS proposals (
     id INTEGER PRIMARY KEY, source TEXT NOT NULL, plan TEXT NOT NULL, asset_class TEXT NOT NULL,
     created TEXT NOT NULL, approved INTEGER NOT NULL, blocked_by TEXT, quantity TEXT NOT NULL,
@@ -180,6 +184,65 @@ class AgentBoard:
             )
         return out
 
+    # ---- grading: turn opinions into a track record ------------------------------------
+    def grade_trade(
+        self,
+        symbol: str,
+        entry_time: datetime,
+        profit_ratio: Decimal,
+        window: timedelta = timedelta(hours=24),
+    ) -> int:
+        """Grade every directional report made in the window before entry. Returns count.
+
+        Bullish is right if the trade made money; bearish is right if it lost or broke even.
+        Neutral reports are not graded. Each report is graded once.
+        """
+
+        start, end = (entry_time - window).isoformat(), entry_time.isoformat()
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT id, source, role, stance, conviction FROM reports WHERE symbol=? AND "
+                "created BETWEEN ? AND ? AND stance != 'neutral' AND id NOT IN "
+                "(SELECT report_id FROM grades)",
+                (symbol.upper(), start, end),
+            ).fetchall()
+            for rid, source, role, stance, conviction in rows:
+                correct = (stance == "bullish") == (profit_ratio > 0)
+                db.execute(
+                    "INSERT INTO grades VALUES (?, ?, ?, ?, ?, ?)",
+                    (rid, source, role, int(correct), conviction, _now().isoformat()),
+                )
+        return len(rows)
+
+    def reliability(self, source: str, role: str, min_samples: int = 10) -> float:
+        """Weight in [0.25, 1.0] from the hit rate; 0.75 until there are enough graded calls.
+
+        A coin-flip analyst (50% hits) gets 0.5; 75%+ gets the full 1.0; a reliably wrong one
+        is cut to 0.25. Weights only scale conviction down, never up.
+        """
+
+        with self._db() as db:
+            row = db.execute(
+                "SELECT COUNT(*), COALESCE(SUM(correct), 0) FROM grades WHERE source=? AND role=?",
+                (source, role),
+            ).fetchone()
+        total, hits = int(row[0]), int(row[1])
+        if total < min_samples:
+            return 0.75
+        hit_rate = hits / total
+        return max(0.25, min(1.0, 0.5 + (hit_rate - 0.5) * 2))
+
+    def leaderboard(self) -> list[dict[str, Any]]:
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT source, role, COUNT(*), SUM(correct) FROM grades GROUP BY source, role "
+                "ORDER BY SUM(correct) * 1.0 / COUNT(*) DESC"
+            ).fetchall()
+        return [
+            {"source": s, "role": r, "graded": n, "hit_rate": round(h / n, 3)}
+            for s, r, n, h in rows
+        ]
+
     # ---- proposals ----------------------------------------------------------------------
     def record_proposal(
         self,
@@ -238,6 +301,9 @@ class AgentBoard:
 class BoardAnalyst:
     """Council seat filled from the board: the latest report for one role, else neutral.
 
+    Conviction is scaled by the source's graded track record for that role, so analysts who
+    are usually wrong lose influence (red flags still veto regardless of weight).
+
     A stale or missing report counts as "no opinion", the same fail-closed rule used for
     local LLM analysts.
     """
@@ -253,7 +319,9 @@ class BoardAnalyst:
     def review(self, plan: TradePlan) -> AnalystReport:
         for item in self.board.recent_reports(plan.symbol, self.max_age):
             if item.role is self.role:
-                return item.report
+                weight = Decimal(str(self.board.reliability(item.source, item.role.value)))
+                scaled = (item.report.conviction * weight).quantize(Decimal("0.0001"))
+                return item.report.model_copy(update={"conviction": scaled})
         return AnalystReport(
             analyst=self.name,
             stance=Stance.NEUTRAL,

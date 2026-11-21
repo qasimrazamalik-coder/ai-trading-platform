@@ -7,6 +7,7 @@ from quant_os_core.knowledge.rag import (
     KnowledgeBase,
     KnowledgeChatbot,
     chunk_markdown,
+    ollama_embed,
     ollama_generate,
     tokenize,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "KnowledgeBase",
     "KnowledgeChatbot",
     "chunk_markdown",
+    "ollama_embed",
     "ollama_generate",
     "tokenize",
 ]

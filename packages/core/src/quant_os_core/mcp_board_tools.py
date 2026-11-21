@@ -173,6 +173,13 @@ BOARD_TOOLS: list[JSON] = [
         "annotations": {"readOnlyHint": False, "destructiveHint": False},
     },
     {
+        "name": "get_analyst_leaderboard",
+        "description": "Graded track record of every analyst source and role (hit rate on "
+        "closed trades). Council weights follow this record.",
+        "inputSchema": {"type": "object", "properties": {}},
+        "annotations": {"readOnlyHint": True},
+    },
+    {
         "name": "list_proposals",
         "description": "Recent paper proposals and the stage that approved or blocked each.",
         "inputSchema": {
@@ -207,6 +214,7 @@ class BoardTools:
             "evaluate_trade_plan": lambda a: self._evaluate(a, record=False),
             "submit_trade_proposal": lambda a: self._evaluate(a, record=True),
             "list_proposals": self.list_proposals,
+            "get_analyst_leaderboard": lambda _a: json.dumps(self.board.leaderboard()) or "[]",
         }
 
     @staticmethod

@@ -149,3 +149,35 @@ def test_mcp_deposit_projection(kb: KnowledgeBase) -> None:
     params = {"name": "deposit_projection", "arguments": args, "_meta": MODERN}
     text = _call(server, "tools/call", params)["result"]["content"][0]["text"]
     assert text.startswith("after 36 months: balance") and "deposited 1850" in text
+
+
+def test_retrieval_eval_set_top3_accuracy(kb: KnowledgeBase) -> None:
+    path = Path(__file__).with_name("eval_questions.jsonl")
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    hits = sum(1 for r in rows if r["source"] in {h.chunk.source for h in kb.search(r["q"], k=3)})
+    assert len(rows) >= 40 and hits / len(rows) >= 0.9
+
+
+def test_hybrid_retrieval_fuses_embeddings_and_survives_offline_embedder() -> None:
+    from quant_os_core.knowledge import Chunk
+
+    chunks = [
+        Chunk("a.md", "Kelly", "kelly fraction bet sizing growth"),
+        Chunk("b.md", "Halal", "futures are not permissible postponement"),
+    ]
+
+    def embed(texts: Sequence[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if ("kelly" in t.lower() or "bet" in t) else [0.0, 1.0] for t in texts]
+
+    kb = KnowledgeBase(chunks, embed=embed)
+    assert kb.search("how much should I bet", k=1)[0].chunk.source == "a.md"
+    state = {"up": True}
+
+    def flaky(texts: Sequence[str]) -> list[list[float]]:
+        if not state["up"]:
+            raise ConnectionError("ollama down")
+        return embed(texts)
+
+    kb2 = KnowledgeBase(chunks, embed=flaky)
+    state["up"] = False
+    assert kb2.search("futures permissible", k=1)[0].chunk.source == "b.md"

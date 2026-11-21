@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 Generate = Callable[[Sequence[dict[str, str]]], str]
+Embed = Callable[[Sequence[str]], list[list[float]]]
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 _HEADING = re.compile(r"^(#{1,3})\s+(.*)$")
@@ -121,8 +122,15 @@ def chunk_markdown(source: str, text: str, max_chars: int = 1500) -> list[Chunk]
 class KnowledgeBase:
     """BM25 index (k1=1.5, b=0.75) over markdown chunks."""
 
-    def __init__(self, chunks: Iterable[Chunk], k1: float = 1.5, b: float = 0.75) -> None:
+    def __init__(
+        self,
+        chunks: Iterable[Chunk],
+        k1: float = 1.5,
+        b: float = 0.75,
+        embed: Embed | None = None,
+    ) -> None:
         self.chunks = list(chunks)
+        self.embed = embed
         if not self.chunks:
             raise ValueError("knowledge base is empty")
         self.k1, self.b = k1, b
@@ -134,16 +142,24 @@ class KnowledgeBase:
             frequency.update(doc.keys())
         n = len(self._docs)
         self._idf = {t: math.log(1 + (n - f + 0.5) / (f + 0.5)) for t, f in frequency.items()}
+        self._vectors: list[list[float]] = []
+        if embed is not None:
+            texts = [f"{c.heading}\n{c.text}" for c in self.chunks]
+            self._vectors = [_unit(v) for v in embed(texts)]
+            if len(self._vectors) != len(self.chunks):
+                raise ValueError("embedder returned the wrong number of vectors")
 
     @classmethod
-    def from_directory(cls, root: Path, pattern: str = "**/*.md") -> KnowledgeBase:
+    def from_directory(
+        cls, root: Path, pattern: str = "**/*.md", embed: Embed | None = None
+    ) -> KnowledgeBase:
         files = sorted(p for p in root.glob(pattern) if p.is_file())
         chunks = [
             chunk
             for path in files
             for chunk in chunk_markdown(path.relative_to(root).as_posix(), path.read_text("utf-8"))
         ]
-        return cls(chunks)
+        return cls(chunks, embed=embed)
 
     def coverage(self, query: str) -> float:
         """Share of the query's distinct terms that appear anywhere in the knowledge base."""
@@ -152,6 +168,35 @@ class KnowledgeBase:
         return sum(1 for t in terms if t in self._idf) / len(terms) if terms else 0.0
 
     def search(self, query: str, k: int = 4) -> list[Hit]:
+        """BM25, fused with embedding similarity by reciprocal rank when an embedder is set."""
+
+        lexical = self._bm25(query)
+        if not self._vectors or self.embed is None:
+            return lexical[:k]
+        try:
+            q = _unit(self.embed([query])[0])
+        except Exception:  # embedder offline: keyword search still works
+            return lexical[:k]
+        semantic = sorted(
+            (
+                (sum(a * b for a, b in zip(q, v, strict=True)), i)
+                for i, v in enumerate(self._vectors)
+            ),
+            reverse=True,
+        )[: max(20, k)]
+        fused: dict[int, float] = {}
+        index = {id(c): i for i, c in enumerate(self.chunks)}
+        for rank, hit in enumerate(lexical[:20]):
+            i = index[id(hit.chunk)]
+            fused[i] = fused.get(i, 0.0) + 1 / (60 + rank)
+        for rank, (_, i) in enumerate(semantic):
+            fused[i] = fused.get(i, 0.0) + 1 / (60 + rank)
+        bm25 = {index[id(h.chunk)]: h.score for h in lexical}
+        order = sorted(fused, key=lambda i: fused[i], reverse=True)[:k]
+        # Keep the BM25 score for the confidence guard; semantic-only hits get the floor score.
+        return [Hit(self.chunks[i], max(bm25.get(i, 0.0), 1.0)) for i in order]
+
+    def _bm25(self, query: str) -> list[Hit]:
         terms = tokenize(query)
         hits: list[Hit] = []
         for chunk, doc, length in zip(self.chunks, self._docs, self._lengths, strict=True):
@@ -164,7 +209,7 @@ class KnowledgeBase:
             if score > 0:
                 hits.append(Hit(chunk, score))
         hits.sort(key=lambda h: h.score, reverse=True)
-        return hits[:k]
+        return hits
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +284,28 @@ class KnowledgeChatbot:
                 False,
             )
         return Answer(reply, sources, True)
+
+
+def _unit(vector: Sequence[float]) -> list[float]:
+    norm = math.sqrt(sum(x * x for x in vector)) or 1.0
+    return [x / norm for x in vector]
+
+
+def ollama_embed(
+    model: str = "nomic-embed-text", url: str = "http://localhost:11434/api/embed"
+) -> Embed:
+    """Local embeddings through Ollama's ``/api/embed`` (returns ``embeddings``)."""
+
+    def call(texts: Sequence[str]) -> list[list[float]]:
+        body = json.dumps({"model": model, "input": list(texts)}).encode()
+        request = urllib.request.Request(
+            url, data=body, headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(request, timeout=300) as response:
+            payload = json.loads(response.read())
+        return [list(map(float, v)) for v in payload["embeddings"]]
+
+    return call
 
 
 def ollama_generate(

@@ -12,6 +12,11 @@
   24/7 crypto bars) under the owner-selected profile. Futures stay blocked (IIFA Resolution 63).
 - Local knowledge base and cited RAG chatbot, read-only dual-era MCP server, `docs/MASTER_PLAN.md`,
   `GUARDRAILS.md` and `AGENTS.md`.
+- Operations layer: durable SQLite state with crash recovery, retries and circuit breakers,
+  Alpaca paper adapter, paper-trading loop (reconciliation, fail-closed, kill switch, patient
+  limit entries), ntfy/webhook/email alerts, local dashboard, champion/challenger model gate,
+  analyst grading with reliability-weighted council seats, PSX sessions and T+1 settlement,
+  hybrid BM25 + embedding retrieval with a 45-question eval set, `docs/RUNBOOK.md`.
 - Agent board and two-way MCP: research tasks, seven analyst roles filled by Claude, ChatGPT or
   local Qwen, paper proposals with two-source consensus, Streamable HTTP transport with token
   auth for remote connectors.
