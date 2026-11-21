@@ -70,7 +70,22 @@ Every closed trade grades the analysts who called it; council weights follow the
 
 Back up `state/` daily (copy the folder while the loop is stopped, or use `sqlite3 .backup`).
 
-## 6. Weekly model retraining
+## 6. Train the neural confidence model
+
+```bash
+python -m quant_os_core.ml.train_confidence --csv data/AAPL.csv data/BTCUSD.csv \
+    --signal donchian --out models/confidence.npz --state state/trading.db \
+    --report reports/confidence.md
+```
+
+CSV columns: `time,high,low,close` (ISO times with timezone; 5+ years of daily bars per symbol
+works best). The command writes a data-science report and saves the model only if it passes
+every gate and beats the current champion. Then add to `paper.json`:
+`"model": {"path": "models/confidence.npz"}` (optional `"min_probability": 0.55`) and,
+for forecast-based stops, `"signal": "forecast"`. Re-run weekly; the old model stays unless
+the new one wins.
+
+## 6b. Weekly model retraining (other models)
 
 Score the current and retrained meta-labeller on the same walk-forward folds, compute the
 Deflated Sharpe and PBO, then call `quant_os_core.ml.champion.run_gate(...)`. The new model

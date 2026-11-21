@@ -98,6 +98,7 @@ def run_gate(
         "pbo": pbo,
         "fold_win_share": result.fold_win_share,
         "mean_score": sum(challenger_scores) / max(1, len(challenger_scores)),
+        **{f"fold_{i:02d}": float(v) for i, v in enumerate(challenger_scores)},
     }
     store.register_model(
         name, version, "champion" if result.promote else "rejected", metrics, result.reason

@@ -12,6 +12,11 @@
   24/7 crypto bars) under the owner-selected profile. Futures stay blocked (IIFA Resolution 63).
 - Local knowledge base and cited RAG chatbot, read-only dual-era MCP server, `docs/MASTER_PLAN.md`,
   `GUARDRAILS.md` and `AGENTS.md`.
+- Forecasting and neural layer: EWMA and GARCH(1,1) volatility forecasts, AR and Holt
+  forecasts with rolling-origin evaluation and Diebold-Mariano tests, leakage-free features,
+  data-science reports, a NumPy neural network with calibration, the neural confidence layer
+  (walk-forward, purged, gated) feeding plan confidence, a forecast-volatility breakout signal
+  and the `train_confidence` command.
 - Operations layer: durable SQLite state with crash recovery, retries and circuit breakers,
   Alpaca paper adapter, paper-trading loop (reconciliation, fail-closed, kill switch, patient
   limit entries), ntfy/webhook/email alerts, local dashboard, champion/challenger model gate,

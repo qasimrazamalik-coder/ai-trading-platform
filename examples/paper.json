@@ -2,6 +2,8 @@
   "state": "state/trading.db",
   "board": "state/board.db",
   "dial": "balanced",
+  "signal": "donchian",
+  "model": null,
   "day_trading": false,
   "timeframe": "1Day",
   "interval_minutes": 1440,

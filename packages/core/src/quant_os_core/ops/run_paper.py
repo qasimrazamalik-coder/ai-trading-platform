@@ -35,7 +35,7 @@ from quant_os_core.ops.alerts import AlertSink, MultiSink, NtfySink, StoreSink, 
 from quant_os_core.ops.alpaca_paper import AlpacaPaperBroker
 from quant_os_core.ops.paper_loop import PaperTrader, UniverseItem
 from quant_os_core.ops.resilience import CircuitBreaker, retry
-from quant_os_core.ops.signals import DonchianBreakout
+from quant_os_core.ops.signals import DonchianBreakout, ForecastBreakout
 from quant_os_core.ops.state import StateStore
 from quant_os_core.risk_engine import RiskEngine, default_protections
 from quant_os_core.shariah import (
@@ -83,6 +83,25 @@ def _universe(config: dict[str, Any]) -> dict[str, UniverseItem]:
     return items
 
 
+def _signal(config: dict[str, Any]) -> Any:
+    """Primary signal, optionally filtered by the trained neural confidence model.
+
+    A configured model that is missing or unreadable stops the loop from starting rather than
+    silently trading without its filter.
+    """
+
+    primary = ForecastBreakout() if config.get("signal") == "forecast" else DonchianBreakout()
+    model_cfg = config.get("model")
+    if not model_cfg:
+        return primary
+    from quant_os_core.ml.neural_signal import NeuralConfidenceSignal
+    from quant_os_core.ml.nn import ConfidenceModel
+
+    model = ConfidenceModel.load(Path(model_cfg["path"]))
+    floor = float(model_cfg.get("min_probability", model.metadata.get("threshold", 0.55)))
+    return NeuralConfidenceSignal(primary, model, min_probability=floor)
+
+
 def _alerts(config: dict[str, Any], store: StateStore) -> AlertSink:
     sinks: list[AlertSink] = [StoreSink(store)]
     alert_cfg = config.get("alerts") or {}
@@ -119,7 +138,7 @@ def build_trader(config: dict[str, Any]) -> tuple[PaperTrader, dict[str, Any]]:
         store=store,
         pipeline=pipeline,
         universe=_universe(config),
-        signal=DonchianBreakout(),
+        signal=_signal(config),
         alerts=_alerts(config, store),
         exit_policy=ExitPolicy(
             trail_fraction=None if day else Decimal("0.08"),
@@ -138,8 +157,12 @@ def load_csv_bars(path: Path) -> list[Bar]:
 
     with path.open(newline="", encoding="utf-8") as handle:
         return [
-            Bar(datetime.fromisoformat(r["time"]), Decimal(r["high"]), Decimal(r["low"]),
-                Decimal(r["close"]))
+            Bar(
+                datetime.fromisoformat(r["time"]),
+                Decimal(r["high"]),
+                Decimal(r["low"]),
+                Decimal(r["close"]),
+            )
             for r in csv.DictReader(handle)
         ]
 

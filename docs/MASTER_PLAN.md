@@ -70,6 +70,14 @@ Connect:
    mode needs Plus or Pro). For anything beyond testing, put an OAuth gateway in front.
 6. In either chat: "Do your analyst shift on Quant OS: take the open research tasks and report."
 
+## 1d. Intelligence layer (built)
+
+Forecasting (EWMA, GARCH, AR, Holt with honest evaluation), data-science reports, a NumPy
+neural network and the neural confidence layer: it learns which breakout trades reach their
+target, calibrates that probability, and passes it to the edge filter and sizing. It is only
+used after walk-forward gates and champion/challenger. Details:
+`docs/knowledge/06-ml-forecasting-neural.md`; training: `docs/RUNBOOK.md` section 6.
+
 ## 2. Knowledge (what the system and the chatbot know)
 
 | Topic | File | Status |
