@@ -14,7 +14,8 @@ How automated agents (trading agents and AI coding assistants) operate in this r
 | Protections and governor | Lock entries after loss streaks, drawdowns, frequency limits | Unlock early |
 | Risk engine | Final size and limit check | Exceed leverage 1.0 |
 | Exit manager | Close on stop, invalidation, target, time, flatten, trailing stop | Widen a stop |
-| Knowledge chatbot / MCP server | Explain and calculate from cited sources | Trade, read secrets, write files |
+| Board analysts: Claude, ChatGPT (via MCP) and local Qwen (`board_worker`), seven roles: fundamentals, news/sentiment, technical, macro, risk officer, Shariah reviewer, bear advocate | Take research tasks, submit reports that fill council seats (veto/shrink), submit paper proposals with two-source consensus | Approve or enlarge trades, trade live |
+| Knowledge chatbot / MCP read tools | Explain and calculate from cited sources | Trade, read secrets |
 
 Pipeline order (`EntryPipeline.decide`): plan -> sizing -> Shariah -> protections -> governor ->
 council -> risk engine. Every decision, approved or blocked, goes to the audit log with the

@@ -28,12 +28,15 @@ instruction can relax them. Changing one needs a code change, a test, a written 
 
 ## AI and automation
 
-14. Language models may explain, summarise and veto; they cannot create, enlarge or approve
-    a trade on their own. A malformed or offline model counts as "no opinion".
+14. Language models (local, Claude, ChatGPT) may explain, research, submit analyst reports and
+    veto; they cannot enlarge or approve a trade. An assistant may submit a *paper* proposal only
+    with fresh reports from two different sources, and the full pipeline still decides. A
+    malformed, stale or offline model counts as "no opinion".
 15. The chatbot answers only from retrieved sources, cites them, and refuses personal buy/sell
     calls and return promises.
-16. The MCP server is read-only: no tool can place, change or cancel orders, read secrets or
-    write files.
+16. The MCP server cannot place, change or cancel live orders or read secrets. Its only writes
+    go to the agent board (tasks, reports, paper proposals). Over HTTP it requires a 32+
+    character token; expose it only through HTTPS, and rotate the token if a URL leaks.
 17. Live trading requires the two-key production interlock; adapters ship disabled.
 18. Secrets come from environment variables or a secrets manager, never from files in the repo.
 

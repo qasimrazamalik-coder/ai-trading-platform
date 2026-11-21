@@ -1,4 +1,4 @@
-"""Read-only MCP server (stdio) exposing Quant OS knowledge and calculators to AI assistants.
+"""MCP server (stdio or HTTP) linking Quant OS to AI assistants such as Claude and ChatGPT.
 
 Dual-era, per the MCP versioning page (https://modelcontextprotocol.io/specification/latest):
 
@@ -6,10 +6,12 @@ Dual-era, per the MCP versioning page (https://modelcontextprotocol.io/specifica
   ``clientCapabilities`` in every request's ``_meta``; ``server/discover`` is supported;
 * legacy clients (2025-11-25 and earlier) open with ``initialize``.
 
-Guardrail: no tool places, modifies or cancels orders, reads credentials or writes files.
-Trading decisions stay in the rule pipeline; this server only explains and calculates.
+Guardrail: no tool places, modifies or cancels live orders or reads credentials. The only
+writes go to the agent board (research tasks, analyst reports, paper proposals), and every
+proposal passes the full rule pipeline. See ``mcp_board_tools`` and ``mcp_http``.
 
-Run:  python -m quant_os_core.mcp_server --docs docs
+Run:  python -m quant_os_core.mcp_server --docs docs --state state/board.db
+      python -m quant_os_core.mcp_server --docs docs --state state/board.db --http 127.0.0.1:8765
 """
 
 from __future__ import annotations
@@ -19,13 +21,15 @@ import json
 import math
 import sys
 from collections.abc import Callable, Mapping
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, TextIO
 
-from quant_os_core.agents.profit_engine import deposit_plan
+from quant_os_core.agents.board import AgentBoard
+from quant_os_core.agents.profit_engine import RiskDial, deposit_plan
 from quant_os_core.instruments import AssetClass, Instrument, InstrumentId, InstrumentType
 from quant_os_core.knowledge.rag import KnowledgeBase
+from quant_os_core.mcp_board_tools import BOARD_TOOLS, BoardTools, ToolError, decimal_arg
 from quant_os_core.shariah import CryptoAsset, ShariahGate, ShariahProfile
 
 SERVER_INFO = {"name": "quant-os", "version": "0.3.0"}
@@ -35,26 +39,17 @@ META_VERSION = "io.modelcontextprotocol/protocolVersion"
 META_CAPS = "io.modelcontextprotocol/clientCapabilities"
 META_SERVER = "io.modelcontextprotocol/serverInfo"
 INSTRUCTIONS = (
-    "Quant OS knowledge and calculators. Read-only: no tool can trade. Use knowledge_search "
-    "before answering trading, quant-math, psychology or halal-rule questions, and cite the "
-    "returned sources."
+    "Quant OS: halal trading knowledge, calculators and the agent board. No tool can trade "
+    "live. Use knowledge_search before answering trading, quant-math, psychology or halal-rule "
+    "questions and cite the sources. As an analyst: call get_research_tasks, research each task "
+    "with your own tools, answer with submit_analyst_report (name yourself in 'source'). Use "
+    "evaluate_trade_plan for dry runs; submit_trade_proposal records paper proposals only."
 )
 
 JSON = dict[str, Any]
 
 
-class ToolError(Exception):
-    """A tool-level failure, reported to the model inside the result (isError)."""
-
-
-def _decimal(args: Mapping[str, Any], key: str) -> Decimal:
-    try:
-        value = Decimal(str(args[key]))
-    except (KeyError, InvalidOperation) as exc:
-        raise ToolError(f"'{key}' must be a number") from exc
-    if not value.is_finite():
-        raise ToolError(f"'{key}' must be finite")
-    return value
+_decimal = decimal_arg
 
 
 _PROFILES = {
@@ -144,9 +139,11 @@ TOOLS: list[JSON] = [
 
 
 class QuantOsMcp:
-    def __init__(self, kb: KnowledgeBase | None) -> None:
+    def __init__(self, kb: KnowledgeBase | None, board: BoardTools | None = None) -> None:
         self.kb = kb
+        self.board = board
         self.legacy_version: str | None = None
+        self.tools: list[JSON] = [*TOOLS, *(BOARD_TOOLS if board else [])]
         self._tools: dict[str, Callable[[Mapping[str, Any]], str]] = {
             "knowledge_search": self._knowledge_search,
             "shariah_check": self._shariah_check,
@@ -154,6 +151,8 @@ class QuantOsMcp:
             "growth_projection": self._growth_projection,
             "deposit_projection": self._deposit_projection,
         }
+        if board is not None:
+            self._tools.update(board.handlers())
 
     # ---- tools -------------------------------------------------------------------------
     def _knowledge_search(self, args: Mapping[str, Any]) -> str:
@@ -294,7 +293,7 @@ class QuantOsMcp:
         if method == "ping":
             return {"jsonrpc": "2.0", "id": msg_id, "result": self._result({})}
         if method == "tools/list":
-            return {"jsonrpc": "2.0", "id": msg_id, "result": self._result({"tools": TOOLS})}
+            return {"jsonrpc": "2.0", "id": msg_id, "result": self._result({"tools": self.tools})}
         if method == "tools/call":
             name = params.get("name")
             arguments = params.get("arguments") or {}
@@ -334,14 +333,33 @@ class QuantOsMcp:
                 stdout.flush()
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Quant OS read-only MCP server (stdio)")
-    parser.add_argument("--docs", type=Path, default=Path("docs"))
-    args = parser.parse_args(argv)
-    kb = KnowledgeBase.from_directory(args.docs) if args.docs.is_dir() else None
+def build_server(docs: Path, state: Path | None, paper_equity: str, dial: str) -> QuantOsMcp:
+    kb = KnowledgeBase.from_directory(docs) if docs.is_dir() else None
     if kb is None:
-        print(f"quant-os mcp: docs folder {args.docs} not found; search disabled", file=sys.stderr)
-    QuantOsMcp(kb).serve(sys.stdin, sys.stdout)
+        print(f"quant-os mcp: docs folder {docs} not found; search disabled", file=sys.stderr)
+    board = (
+        BoardTools(AgentBoard(state), paper_equity=Decimal(paper_equity), dial=RiskDial(dial))
+        if state is not None
+        else None
+    )
+    return QuantOsMcp(kb, board)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Quant OS MCP server (stdio or HTTP)")
+    parser.add_argument("--docs", type=Path, default=Path("docs"))
+    parser.add_argument("--state", type=Path, help="agent board SQLite file; enables board tools")
+    parser.add_argument("--paper-equity", default="50")
+    parser.add_argument("--dial", default="balanced", choices=[d.value for d in RiskDial])
+    parser.add_argument("--http", metavar="HOST:PORT", help="serve Streamable HTTP instead")
+    args = parser.parse_args(argv)
+    server = build_server(args.docs, args.state, args.paper_equity, args.dial)
+    if args.http:
+        from quant_os_core.mcp_http import serve_http
+
+        host, _, port = args.http.rpartition(":")
+        return serve_http(server, host or "127.0.0.1", int(port))
+    server.serve(sys.stdin, sys.stdout)
     return 0
 
 

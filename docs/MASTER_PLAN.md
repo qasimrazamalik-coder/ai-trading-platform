@@ -43,6 +43,33 @@ Estimated with `sim_v5` (20,000 fat-tailed paths, net of costs; assumptions, not
 Without a proven day-trading edge, the realistic range stays about 8-10% a year. The edge filter
 and paper period decide whether the 22% row is real; nothing else should.
 
+## 1c. Claude + ChatGPT as analysts over MCP (built)
+
+The bot and the assistants talk both ways through the agent board (`agents/board.py`):
+
+- **Bot -> assistants:** research tasks (`get_research_tasks`); assistants can also ask each
+  other (`post_research_task`).
+- **Assistants -> bot:** analyst reports in seven roles (`submit_analyst_report`) that fill
+  council seats; dry runs (`evaluate_trade_plan`); paper proposals (`submit_trade_proposal`)
+  that need fresh reports from two different sources and then pass the full pipeline.
+- **Local third voice:** `run_local_shift` lets Qwen3 (Ollama, free, offline) answer tasks.
+
+What it adds: research coverage (news, filings, red flags) and more vetoes on bad trades.
+What it does not add: better price prediction. In Alpha Arena, LLMs trading on their own mostly
+lost money, so LLMs here can only veto, shrink or propose, never approve.
+
+Connect:
+
+1. `export QUANT_OS_MCP_TOKEN=$(python -c "import secrets;print(secrets.token_urlsafe(32))")`
+2. `python -m quant_os_core.mcp_server --docs docs --state state/board.db --http 127.0.0.1:8765`
+3. HTTPS tunnel: `cloudflared tunnel --url http://127.0.0.1:8765` (free) gives `https://<name>.trycloudflare.com`.
+4. **Claude:** Customize > Connectors > Add custom connector, URL `https://<tunnel>/mcp`, static
+   header `Authorization: Bearer <token>`. Claude Code / Desktop can use the stdio command instead.
+5. **ChatGPT:** Settings > Apps/Connectors > Advanced > Developer mode, create an app with URL
+   `https://<tunnel>/mcp/<token>` and "No authentication" (the URL is the secret; developer
+   mode needs Plus or Pro). For anything beyond testing, put an OAuth gateway in front.
+6. In either chat: "Do your analyst shift on Quant OS: take the open research tasks and report."
+
 ## 2. Knowledge (what the system and the chatbot know)
 
 | Topic | File | Status |
