@@ -58,6 +58,44 @@ CORE_EXCLUDED_SECTORS: frozenset[str] = frozenset(
     }
 )
 
+# Token screen used when spot crypto is enabled (R13). Scholars who permit spot crypto still
+# exclude tokens whose return is interest, whose purpose is gambling or a haram sector, or that
+# embed a derivative. "meme" (no utility, pure price betting) is a judgement call kept here
+# because it is the gharar/maysir case those scholars name most often; remove it per profile
+# only with a scholar's sign-off.
+CORE_EXCLUDED_CRYPTO_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "lending",
+        "yield",
+        "interest_bearing_stablecoin",
+        "gambling",
+        "betting",
+        "prediction",
+        "adult",
+        "alcohol",
+        "leveraged_token",
+        "derivative",
+        "meme",
+    }
+)
+# Spot crypto changes hands on the exchange ledger at the trade, so R9 has nothing to wait for.
+SETTLES_ON_TRADE: frozenset[AssetClass] = frozenset({AssetClass.CRYPTO})
+
+
+@dataclass(frozen=True, slots=True)
+class CryptoAsset:
+    """Inputs for the token screen (R13). Fill from the project's docs, not from price data."""
+
+    symbol: str
+    category: str
+    pays_interest: bool = False  # lending/"earn" yield, interest-bearing stablecoin
+    is_leveraged_token: bool = False  # e.g. BTC3L: holds perpetuals underneath
+    has_utility: bool = True  # network, payment or asset backing beyond price speculation
+
+    def __post_init__(self) -> None:
+        if not self.symbol.strip() or not self.category.strip():
+            raise ValueError("symbol and category are required")
+
 
 @dataclass(frozen=True, slots=True)
 class ShariahProfile:
@@ -68,6 +106,17 @@ class ShariahProfile:
     max_noncompliant_revenue_ratio: Decimal = Decimal("0.05")  # R6
     min_tangible_asset_ratio: Decimal = Decimal("0.3333")  # R6, SS21 3/17-3/20
     extra_excluded_sectors: frozenset[str] = field(default_factory=frozenset)  # R7 optional
+    extra_excluded_crypto_categories: frozenset[str] = field(default_factory=frozenset)  # R13
+
+    @classmethod
+    def spot_crypto_and_day_trading(cls) -> ShariahProfile:
+        """Owner-selected profile: spot crypto on, same-day resale on, everything else halal.
+
+        Futures, perpetuals, options, CFDs, binaries, margin and shorting stay blocked: those
+        rules are not profile settings.
+        """
+
+        return cls(madhhab=Madhhab.PERMISSIVE_SPOT_CRYPTO, allow_pre_settlement_resale=True)
 
     @property
     def crypto_enabled(self) -> bool:
@@ -76,6 +125,10 @@ class ShariahProfile:
     @property
     def excluded_sectors(self) -> frozenset[str]:
         return CORE_EXCLUDED_SECTORS | self.extra_excluded_sectors
+
+    @property
+    def excluded_crypto_categories(self) -> frozenset[str]:
+        return CORE_EXCLUDED_CRYPTO_CATEGORIES | self.extra_excluded_crypto_categories
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +175,7 @@ class ShariahOrderContext:
     margin_enabled: bool = False
     financing_charge_rate: Decimal = Decimal("0")
     venue_licensed: bool = True
+    settled_quantity: Decimal | None = None  # R9: owned units whose settlement has completed
 
 
 _ALLOW = ShariahDecision(True, "OK", "passes all applicable Shariah rules")
@@ -180,6 +234,20 @@ class ShariahGate:
             )
         return _ALLOW
 
+    def screen_crypto(self, asset: CryptoAsset) -> ShariahDecision:
+        if not self.profile.crypto_enabled:
+            return ShariahDecision(False, "R13", "crypto is disabled for the selected profile")
+        category = asset.category.strip().lower()
+        if category in self.profile.excluded_crypto_categories:
+            return ShariahDecision(False, "R13", f"token category '{category}' is excluded")
+        if asset.pays_interest:
+            return ShariahDecision(False, "R13", "token return is interest (riba)")
+        if asset.is_leveraged_token:
+            return ShariahDecision(False, "R2", "leveraged tokens hold derivatives")
+        if not asset.has_utility:
+            return ShariahDecision(False, "R13", "no utility or backing; pure price betting")
+        return _ALLOW
+
     def check_order(
         self,
         instrument: Instrument,
@@ -189,6 +257,7 @@ class ShariahGate:
         notional: Decimal,
         context: ShariahOrderContext,
         financials: CompanyFinancials | None = None,
+        crypto_asset: CryptoAsset | None = None,
     ) -> ShariahDecision:
         instrument_decision = self.check_instrument(instrument)
         # Selling an already-owned asset to exit is always allowed, even if it was delisted
@@ -207,6 +276,13 @@ class ShariahGate:
         if is_sell:
             if quantity > context.owned_quantity:
                 return ShariahDecision(False, "R4", "short selling is not permissible")
+            strict = not self.profile.allow_pre_settlement_resale
+            if strict and instrument.asset_class not in SETTLES_ON_TRADE:
+                settled = context.settled_quantity
+                if settled is None or quantity > settled:
+                    return ShariahDecision(
+                        False, "R9", "selling before settlement is blocked by this profile"
+                    )
             return _ALLOW
         if notional > context.free_cash:
             return ShariahDecision(
@@ -218,6 +294,12 @@ class ShariahGate:
             screen = self.screen_company(financials)
             if not screen.allowed:
                 return screen
+        if instrument.asset_class is AssetClass.CRYPTO:
+            if crypto_asset is None:
+                return ShariahDecision(False, "R13", "no token profile; cannot verify compliance")
+            token = self.screen_crypto(crypto_asset)
+            if not token.allowed:
+                return token
         return _ALLOW
 
 

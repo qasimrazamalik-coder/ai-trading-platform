@@ -3,8 +3,9 @@
 A :class:`~quant_os_core.agents.trade_plan.TradePlan` carries a stop loss, a profit target and
 a written invalidation condition. Free text cannot be evaluated by code, so each open position
 also carries machine-checkable :class:`InvalidationRule` objects; the text stays for humans and
-the audit log. Exit priority on a bar: stop (worst case first), invalidation, target, trailing
-stop, time stop. Stops use the bar's low and targets its high, so results are conservative.
+the audit log. Exit priority on a bar: stop (worst case first), invalidation, target, time stop,
+day-trade flatten, then the trailing-stop update. A strict-profile position cannot exit at
+all before settlement. Stops use the bar's low and targets its high, so results are conservative.
 """
 
 from __future__ import annotations
@@ -69,6 +70,8 @@ class OpenPosition:
     rules: tuple[InvalidationRule, ...] = ()
     trail_fraction: Decimal | None = None  # e.g. 0.08 trails 8% below the highest high
     max_holding: timedelta | None = None
+    flatten_at: datetime | None = None  # day trading: close at this time whatever happens
+    earliest_exit: datetime | None = None  # strict profile: no sale before settlement
     highest: Decimal = field(init=False)
     stop: Decimal = field(init=False)
 
@@ -95,6 +98,8 @@ class ExitManager:
         self, position: OpenPosition, bar: Bar, closes: tuple[Decimal, ...]
     ) -> ExitEvent | None:
         plan = position.plan
+        if position.earliest_exit is not None and bar.time < position.earliest_exit:
+            return None
         if bar.low <= position.stop:
             reason = (
                 ExitReason.STOP_LOSS
@@ -110,6 +115,8 @@ class ExitManager:
             position.max_holding is not None
             and bar.time - position.entry_time >= position.max_holding
         ):
+            return self._exit(position, bar.time, bar.close, ExitReason.TIME)
+        if position.flatten_at is not None and bar.time >= position.flatten_at:
             return self._exit(position, bar.time, bar.close, ExitReason.TIME)
         if position.trail_fraction is not None and bar.high > position.highest:
             position.highest = bar.high

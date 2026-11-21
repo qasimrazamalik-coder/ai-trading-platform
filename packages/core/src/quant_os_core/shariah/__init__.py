@@ -1,7 +1,9 @@
 """Shariah compliance gate: deterministic rules evaluated before any risk check."""
 
 from quant_os_core.shariah.rules import (
+    CORE_EXCLUDED_CRYPTO_CATEGORIES,
     CompanyFinancials,
+    CryptoAsset,
     Madhhab,
     ShariahDecision,
     ShariahGate,
@@ -12,7 +14,9 @@ from quant_os_core.shariah.rules import (
 )
 
 __all__ = [
+    "CORE_EXCLUDED_CRYPTO_CATEGORIES",
     "CompanyFinancials",
+    "CryptoAsset",
     "Madhhab",
     "ShariahDecision",
     "ShariahGate",

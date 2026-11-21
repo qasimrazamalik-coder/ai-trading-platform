@@ -15,12 +15,13 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
 
+from quant_os_core.agents.day_trading import flatten_time, settlement_time
 from quant_os_core.agents.exits import Bar, ExitManager, InvalidationRule, OpenPosition
 from quant_os_core.agents.pipeline import EntryDecision, EntryPipeline
 from quant_os_core.agents.trade_plan import TradePlan
 from quant_os_core.instruments import Instrument
 from quant_os_core.risk_engine import ClosedTrade, RiskContext, RiskPosition
-from quant_os_core.shariah import CompanyFinancials, ShariahOrderContext
+from quant_os_core.shariah import CompanyFinancials, CryptoAsset, ShariahOrderContext
 
 SignalFn = Callable[[Sequence[Bar]], TradePlan | None]
 
@@ -30,6 +31,7 @@ class ExitPolicy:
     rules: tuple[InvalidationRule, ...] = ()
     trail_fraction: Decimal | None = Decimal("0.08")
     max_holding: timedelta | None = timedelta(days=60)
+    flatten_before_close: bool = False  # day trading: no position held past the session
 
 
 @dataclass(slots=True)
@@ -72,10 +74,17 @@ def simulate(
     starting_cash: Decimal,
     exit_policy: ExitPolicy | None = None,
     cost_per_side: Decimal = Decimal("0.001"),
+    crypto_asset: CryptoAsset | None = None,
 ) -> SimulationResult:
     if starting_cash <= 0:
         raise ValueError("starting_cash must be positive")
     policy = exit_policy or ExitPolicy()
+    asset_class = instrument.asset_class
+    hold_to_settlement = not pipeline.shariah.profile.allow_pre_settlement_resale
+    if hold_to_settlement and policy.flatten_before_close:
+        flat = flatten_time(asset_class, bars[0].time) if bars else None
+        if flat is not None:
+            raise ValueError("this profile forbids selling before settlement, so no day trades")
     exits = ExitManager()
     result = SimulationResult(starting_cash, starting_cash)
     peak = starting_cash
@@ -106,6 +115,7 @@ def simulate(
                     plan,
                     instrument=instrument,
                     financials=financials,
+                    crypto_asset=crypto_asset,
                     account=ShariahOrderContext(owned_quantity=Decimal("0"), free_cash=result.cash),
                     risk_context=RiskContext(
                         equity=equity,
@@ -130,6 +140,14 @@ def simulate(
                         rules=policy.rules,
                         trail_fraction=policy.trail_fraction,
                         max_holding=policy.max_holding,
+                        flatten_at=(
+                            flatten_time(asset_class, bar.time)
+                            if policy.flatten_before_close
+                            else None
+                        ),
+                        earliest_exit=(
+                            settlement_time(asset_class, bar.time) if hold_to_settlement else None
+                        ),
                     )
 
         marked = result.cash + (position.quantity * bar.close if position else Decimal("0"))

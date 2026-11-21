@@ -24,6 +24,7 @@ from quant_os_core.risk_engine import (
 )
 from quant_os_core.shariah import (
     CompanyFinancials,
+    CryptoAsset,
     ShariahGate,
     ShariahOrderContext,
 )
@@ -65,6 +66,7 @@ class EntryPipeline:
         instrument: Instrument,
         financials: CompanyFinancials | None,
         account: ShariahOrderContext,
+        crypto_asset: CryptoAsset | None = None,
         risk_context: RiskContext,
         closed_trades: Sequence[ClosedTrade],
         open_symbols: set[str],
@@ -93,6 +95,7 @@ class EntryPipeline:
             notional=quantity * plan.entry_price,
             context=account,
             financials=financials,
+            crypto_asset=crypto_asset,
         )
         if not shariah.allowed:
             return stop("shariah", f"{shariah.rule_id}: {shariah.reason}")

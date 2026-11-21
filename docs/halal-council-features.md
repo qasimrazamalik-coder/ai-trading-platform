@@ -54,6 +54,36 @@ prohibit futures, options and swaps on shares. The only route the resolution off
 restructuring as a *salam* sale, which retail futures markets do not provide. Futures,
 perpetuals, options and CFDs therefore remain blocked by rule R2.
 
+## Spot crypto and day trading (owner's choice)
+
+Both are disputed among scholars, so they are a profile choice, not a default. The owner chose
+`ShariahProfile.spot_crypto_and_day_trading()`; the library default stays PK Hanafi (crypto
+off). Positions of the scholars, as of November 2026:
+
+- Crypto: Darul Uloom Karachi's fatwa of 10 June 2026 (Mufti Taqi Usmani and others) holds that
+  crypto is not *maal*; Saylani Welfare's scholars hold it permissible; PVARA has asked
+  Darul Uloom to rule on asset categories separately.
+- Day trading: many muftis permit same-day resale of a compliant share; the stricter Hanafi view
+  attributed to Mufti Taqi Usmani requires settlement (possession) before resale.
+
+| Piece | Where | Behaviour |
+|---|---|---|
+| Owner profile | `ShariahProfile.spot_crypto_and_day_trading()` | spot crypto on, same-day resale on |
+| Token screen (R13) | `ShariahGate.screen_crypto`, `CryptoAsset` | blocks lending/yield, interest-bearing stablecoins, gambling, betting, prediction, adult, alcohol, leveraged tokens, derivatives, meme coins and tokens with no utility; a crypto buy with no token profile is refused |
+| Crypto derivatives | rule R2 (unchanged) | perpetuals, futures and options on crypto stay blocked in every profile |
+| Settlement rule (R9) | `ShariahOrderContext.settled_quantity` | with `allow_pre_settlement_resale=False`, equity sales above the settled quantity are refused; spot crypto settles at the trade |
+| Session and settlement times | `agents/day_trading.py` | US close 16:00 New York, flatten 15 minutes before; T+1 settlement skipping weekends and given holidays |
+| Day-trading plan limits | `day_trading_policy()` | stops 0.3-3%, 0.5% risk per trade, up to 10 trades a day |
+| Exits | `OpenPosition.flatten_at`, `earliest_exit` | day trades close before the bell; strict-profile positions cannot exit before settlement |
+| Simulator | `ExitPolicy.flatten_before_close`, `crypto_asset=` | replays intraday and crypto trades; refuses equity day trading under the strict profile |
+| Data | `AlpacaBars.bars(timeframe=...)`, `AlpacaCryptoBars` | 1Min to 1Day stock bars; 24/7 crypto bars (`BTC/USD`) |
+
+The token categories are the code's judgement of what permitting scholars exclude; "meme" and
+"no utility" in particular need a scholar's confirmation. The account is a cash account, so
+the US pattern-day-trader margin rule (replaced by FINRA intraday margin standards in June
+2026) does not apply; a cash account can only buy with settled cash, which callers pass as
+`free_cash`.
+
 ## Not built yet
 
 Paper-trading loop against Alpaca's paper API, Telegram alerts and the Next.js dashboard.

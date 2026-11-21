@@ -1,4 +1,4 @@
-"""Free data adapters: Alpaca daily bars and SEC EDGAR fundamentals for the Shariah screen.
+"""Free data adapters: Alpaca stock/crypto bars and SEC EDGAR fundamentals for the Shariah screen.
 
 Network access goes through an injectable ``fetch`` callable so the adapters can be tested
 offline and swapped for an async client later. Only the standard library is used.
@@ -11,6 +11,7 @@ offline and swapped for an async client later. Only the standard library is used
 from __future__ import annotations
 
 import json
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -31,8 +32,26 @@ def urllib_fetch(url: str, headers: Mapping[str, str]) -> bytes:
     return body
 
 
+def _bar(raw: Mapping[str, Any]) -> Bar:
+    return Bar(
+        time=datetime.fromisoformat(str(raw["t"]).replace("Z", "+00:00")),
+        high=Decimal(str(raw["h"])),
+        low=Decimal(str(raw["l"])),
+        close=Decimal(str(raw["c"])),
+    )
+
+
+def _check_timeframe(timeframe: str) -> str:
+    allowed = {"1Min", "5Min", "15Min", "30Min", "1Hour", "4Hour", "1Day"}
+    if timeframe not in allowed:
+        raise ValueError(f"timeframe must be one of {sorted(allowed)}")
+    return timeframe
+
+
 @dataclass(frozen=True, slots=True)
 class AlpacaBars:
+    """US stock bars. ``timeframe`` takes intraday values for day trading."""
+
     key_id: str
     secret_key: str
     fetch: Fetch = urllib_fetch
@@ -40,26 +59,62 @@ class AlpacaBars:
     feed: str = "iex"
 
     def daily(self, symbol: str, start: str, end: str) -> list[Bar]:
+        return self.bars(symbol, start, end, "1Day")
+
+    def bars(self, symbol: str, start: str, end: str, timeframe: str = "1Day") -> list[Bar]:
+        frame = _check_timeframe(timeframe)
         bars: list[Bar] = []
         token: str | None = None
         headers = {"APCA-API-KEY-ID": self.key_id, "APCA-API-SECRET-KEY": self.secret_key}
         while True:
             url = (
-                f"{self.base_url}/{symbol.upper()}/bars?timeframe=1Day&start={start}&end={end}"
+                f"{self.base_url}/{symbol.upper()}/bars?timeframe={frame}&start={start}&end={end}"
                 f"&adjustment=all&feed={self.feed}&limit=10000"
             )
             if token:
                 url += f"&page_token={token}"
             payload: dict[str, Any] = json.loads(self.fetch(url, headers))
-            for raw in payload.get("bars") or []:
-                bars.append(
-                    Bar(
-                        time=datetime.fromisoformat(str(raw["t"]).replace("Z", "+00:00")),
-                        high=Decimal(str(raw["h"])),
-                        low=Decimal(str(raw["l"])),
-                        close=Decimal(str(raw["c"])),
-                    )
-                )
+            bars.extend(_bar(raw) for raw in payload.get("bars") or [])
+            token = payload.get("next_page_token")
+            if not token:
+                return bars
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaCryptoBars:
+    """Spot crypto bars (24/7) from Alpaca's v1beta3 endpoint, e.g. ``BTC/USD``.
+
+    https://docs.alpaca.markets/reference/cryptobars-1 . The response keys bars by symbol.
+    Keys are sent when given; the free market-data plan covers crypto bars.
+    """
+
+    key_id: str = ""
+    secret_key: str = ""
+    fetch: Fetch = urllib_fetch
+    base_url: str = "https://data.alpaca.markets/v1beta3/crypto/us/bars"
+
+    def bars(self, symbol: str, start: str, end: str, timeframe: str = "1Hour") -> list[Bar]:
+        frame = _check_timeframe(timeframe)
+        pair = symbol.upper()
+        if "/" not in pair:
+            raise ValueError("crypto symbols use BASE/QUOTE form, e.g. BTC/USD")
+        headers = (
+            {"APCA-API-KEY-ID": self.key_id, "APCA-API-SECRET-KEY": self.secret_key}
+            if self.key_id
+            else {}
+        )
+        bars: list[Bar] = []
+        token: str | None = None
+        while True:
+            url = (
+                f"{self.base_url}?symbols={urllib.parse.quote(pair, safe='')}&timeframe={frame}"
+                f"&start={start}&end={end}&limit=10000"
+            )
+            if token:
+                url += f"&page_token={token}"
+            payload: dict[str, Any] = json.loads(self.fetch(url, headers))
+            by_symbol = payload.get("bars") or {}
+            bars.extend(_bar(raw) for raw in by_symbol.get(pair) or [])
             token = payload.get("next_page_token")
             if not token:
                 return bars
