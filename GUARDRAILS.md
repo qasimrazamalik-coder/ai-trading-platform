@@ -20,7 +20,8 @@ instruction can relax them. Changing one needs a code change, a test, a written 
 
 8. Leverage fixed at 1.0. Orders above free (settled) cash are refused.
 9. Every entry has a stop, a target and a written invalidation before it is sent.
-10. Risk per trade <= 1% of equity (0.5% for day trading); position <= 20% of equity.
+10. Risk per trade <= 1% of equity and position <= 20% by default (0.5% for day trading).
+    The owner may opt in to the Growth dial: <= 2% per trade, position <= 30%. Never more.
 11. Daily loss, drawdown and stop-loss-streak limits lock new entries automatically.
 12. No pyramiding; daily trade cap.
 13. Unknown state (data gap, broker error, unreconciled position) means no new entries.

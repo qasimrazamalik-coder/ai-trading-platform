@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, TextIO
 
+from quant_os_core.agents.profit_engine import deposit_plan
 from quant_os_core.instruments import AssetClass, Instrument, InstrumentId, InstrumentType
 from quant_os_core.knowledge.rag import KnowledgeBase
 from quant_os_core.shariah import CryptoAsset, ShariahGate, ShariahProfile
@@ -109,6 +110,22 @@ TOOLS: list[JSON] = [
         "annotations": {"readOnlyHint": True},
     },
     {
+        "name": "deposit_projection",
+        "description": "Balance after months of compounding at an annual return with a "
+        "monthly deposit. Illustrative only; returns are never constant.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "start": {"type": "number", "minimum": 0},
+                "monthly_deposit": {"type": "number", "minimum": 0},
+                "annual_return": {"type": "number", "exclusiveMinimum": -1},
+                "months": {"type": "integer", "minimum": 1, "maximum": 600},
+            },
+            "required": ["start", "monthly_deposit", "annual_return", "months"],
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
         "name": "growth_projection",
         "description": "Periods needed to grow start to target at a constant return per "
         "period: ln(target/start) / ln(1 + r). Illustrative only; returns are never constant.",
@@ -135,6 +152,7 @@ class QuantOsMcp:
             "shariah_check": self._shariah_check,
             "position_size": self._position_size,
             "growth_projection": self._growth_projection,
+            "deposit_projection": self._deposit_projection,
         }
 
     # ---- tools -------------------------------------------------------------------------
@@ -201,6 +219,21 @@ class QuantOsMcp:
             return "0 periods: target already reached"
         periods = math.log(float(target / start)) / math.log1p(float(rate))
         return f"{periods:.1f} periods at a constant {float(rate):.2%} per period"
+
+    def _deposit_projection(self, args: Mapping[str, Any]) -> str:
+        start, monthly, rate = (
+            _decimal(args, k) for k in ("start", "monthly_deposit", "annual_return")
+        )
+        try:
+            months = int(args["months"])
+            path = deposit_plan(start, monthly, rate, months)
+        except (KeyError, ValueError) as exc:
+            raise ToolError(f"invalid inputs: {exc}") from exc
+        end = path[-1]
+        return (
+            f"after {months} months: balance {end.balance}, deposited {end.deposited}, "
+            f"growth {end.balance - end.deposited:.2f}"
+        )
 
     # ---- protocol ----------------------------------------------------------------------
     def _result(self, body: JSON) -> JSON:

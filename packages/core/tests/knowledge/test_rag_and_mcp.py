@@ -81,7 +81,13 @@ def test_mcp_modern_discover_list_and_call(kb: KnowledgeBase) -> None:
     discover = _call(server, "server/discover", {"_meta": MODERN})["result"]
     assert discover["resultType"] == "complete" and "2026-07-28" in discover["supportedVersions"]
     names = {t["name"] for t in _call(server, "tools/list", {"_meta": MODERN})["result"]["tools"]}
-    assert names == {"knowledge_search", "shariah_check", "position_size", "growth_projection"}
+    assert names == {
+        "knowledge_search",
+        "shariah_check",
+        "position_size",
+        "growth_projection",
+        "deposit_projection",
+    }
 
     def tool(name: str, **arguments: object) -> dict:  # type: ignore[type-arg]
         params = {"name": name, "arguments": arguments, "_meta": MODERN}
@@ -135,3 +141,11 @@ def test_mcp_stdio_loop_survives_bad_input(kb: KnowledgeBase) -> None:
     QuantOsMcp(kb).serve(io.StringIO("\n".join(lines)), out)
     replies = [json.loads(r) for r in out.getvalue().splitlines()]
     assert replies[0]["error"]["code"] == -32700 and replies[1]["id"] == 7
+
+
+def test_mcp_deposit_projection(kb: KnowledgeBase) -> None:
+    server = QuantOsMcp(kb)
+    args = {"start": 50, "monthly_deposit": 50, "annual_return": 0.1, "months": 36}
+    params = {"name": "deposit_projection", "arguments": args, "_meta": MODERN}
+    text = _call(server, "tools/call", params)["result"]["content"][0]["text"]
+    assert text.startswith("after 36 months: balance") and "deposited 1850" in text

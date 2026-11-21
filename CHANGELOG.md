@@ -12,6 +12,10 @@
   24/7 crypto bars) under the owner-selected profile. Futures stay blocked (IIFA Resolution 63).
 - Local knowledge base and cited RAG chatbot, read-only dual-era MCP server, `docs/MASTER_PLAN.md`,
   `GUARDRAILS.md` and `AGENTS.md`.
+- Profit engine: edge-over-cost pipeline stage, maker-first cost model, risk dial
+  (conservative / balanced / growth), risk-parity sleeve allocator, deposit planner and an MCP
+  `deposit_projection` tool. Guardrail 10 now allows 2% risk per trade, but only when the owner
+  selects the Growth dial; the default stays 1%.
 
 ## 1.0.0 — 2026-09-14
 

@@ -25,6 +25,17 @@ from quant_os_core.agents.exits import (
     RuleKind,
 )
 from quant_os_core.agents.pipeline import EntryDecision, EntryPipeline, StageResult
+from quant_os_core.agents.profit_engine import (
+    Allocation,
+    CostModel,
+    RiskDial,
+    VenueCost,
+    allocate_sleeves,
+    check_edge,
+    deposit_plan,
+    dial_policy,
+    expected_edge,
+)
 from quant_os_core.agents.trade_plan import (
     PlanGovernor,
     PlanPolicy,
@@ -36,9 +47,11 @@ from quant_os_core.agents.trade_plan import (
 
 __all__ = [
     "ANALYST_JSON_SCHEMA",
+    "Allocation",
     "AnalystCouncil",
     "AnalystReport",
     "Bar",
+    "CostModel",
     "CouncilDecision",
     "CouncilPolicy",
     "EntryDecision",
@@ -50,12 +63,19 @@ __all__ = [
     "PlanGovernor",
     "PlanPolicy",
     "PlanVerdict",
+    "RiskDial",
     "RuleAnalyst",
     "RuleKind",
     "StageResult",
     "Stance",
     "TradePlan",
+    "VenueCost",
+    "allocate_sleeves",
+    "check_edge",
     "day_trading_policy",
+    "deposit_plan",
+    "dial_policy",
+    "expected_edge",
     "flatten_time",
     "parse_analyst_json",
     "session_close",

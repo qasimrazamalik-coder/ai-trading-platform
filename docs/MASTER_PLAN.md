@@ -27,6 +27,22 @@ Every item has an acceptance test; nothing counts as done until it passes.
 (3) more uncorrelated strategies, (4) lower costs, (5) better entries. The plan follows that
 order.
 
+## 1b. Profit upgrades (built) and what they are worth
+
+Estimated with `sim_v5` (20,000 fat-tailed paths, net of costs; assumptions, not a backtest).
+
+| Upgrade | Code | Effect on $50 expected return |
+|---|---|---|
+| Maker-first execution, commission-free stocks, lower turnover | `CostModel`, `VenueCost` | cost drag 1.6% -> 0.4% a year: **+1.2 points** |
+| Edge-over-cost filter: a trade must expect 1.5x its round-trip cost | `check_edge`, pipeline stage `edge` | removes the trades that made day trading lose (-5% to -30% a year in sim_v4) |
+| Risk dial: conservative / balanced / growth | `dial_policy`, `RiskDial` | growth doubles risk per trade; returns and drawdowns both rise |
+| Four halal sleeves (US stocks, PSX KMI, crypto spot, gold), risk parity, no leverage | `allocate_sleeves` | lower drawdown (5% vs 6% typical yearly) for similar return |
+| Monthly deposits | `deposit_plan`, MCP `deposit_projection` | $100/month for 5 years: about $7,300 from $6,050 deposited |
+| Day-trading sleeve, **only if paper proves >= 0.30% gross edge per trade** | day-trading module + edge filter | about 22% a year; $50 -> ~$60 in a year, ~$128 in 5 years (median) |
+
+Without a proven day-trading edge, the realistic range stays about 8-10% a year. The edge filter
+and paper period decide whether the 22% row is real; nothing else should.
+
 ## 2. Knowledge (what the system and the chatbot know)
 
 | Topic | File | Status |

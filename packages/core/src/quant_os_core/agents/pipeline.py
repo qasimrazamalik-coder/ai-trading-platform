@@ -1,6 +1,7 @@
 """The entry decision pipeline, in the order the research report specifies.
 
-plan validation -> Shariah gate -> protections -> frequency governor -> analyst council
+plan validation -> edge over cost (optional) -> Shariah gate -> protections -> frequency
+governor -> analyst council
 -> sizing -> independent risk engine. Every stage can stop the trade; none can enlarge
 what an earlier stage allowed. Each stage's verdict is kept for the audit log.
 """
@@ -13,6 +14,7 @@ from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 
 from quant_os_core.agents.council import AnalystCouncil
+from quant_os_core.agents.profit_engine import CostModel, check_edge
 from quant_os_core.agents.trade_plan import PlanGovernor, TradePlan, size_plan, validate_plan
 from quant_os_core.events import OrderIntent, Side
 from quant_os_core.instruments import Instrument
@@ -57,6 +59,7 @@ class EntryPipeline:
     council: AnalystCouncil
     risk: RiskEngine
     strategy_id: str = "halal-council"
+    cost_model: CostModel | None = None  # when set, trades must beat costs by a margin
     _log: list[EntryDecision] = field(default_factory=list)
 
     def decide(
@@ -84,6 +87,12 @@ class EntryPipeline:
         if not verdict.accepted:
             return stop("plan", verdict.reason)
         stages.append(StageResult("plan", True, verdict.reason))
+
+        if self.cost_model is not None:
+            edge = check_edge(plan, instrument.asset_class, self.cost_model)
+            if not edge.accepted:
+                return stop("edge", edge.reason)
+            stages.append(StageResult("edge", True, edge.reason))
 
         quantity = size_plan(plan, self.governor.policy, risk_context.equity, account.free_cash)
         if quantity <= 0:
