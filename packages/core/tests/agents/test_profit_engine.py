@@ -105,7 +105,7 @@ def test_pipeline_edge_stage_blocks_before_shariah() -> None:
 def test_risk_dial_presets() -> None:
     growth = dial_policy(RiskDial.GROWTH)
     assert growth.risk_per_trade == Decimal("0.02") and growth.max_position_fraction == Decimal(
-        "0.30"
+        "0.20"
     )
     assert dial_policy(RiskDial.CONSERVATIVE).risk_per_trade == Decimal("0.005")
 

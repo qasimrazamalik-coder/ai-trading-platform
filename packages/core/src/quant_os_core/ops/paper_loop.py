@@ -32,6 +32,7 @@ from quant_os_core.execution.broker import ExecutionBroker
 from quant_os_core.execution.models import AccountSnapshot
 from quant_os_core.instruments import Instrument
 from quant_os_core.ops.alerts import AlertSink
+from quant_os_core.ops.ledger import Ledger, record_fill_safely
 from quant_os_core.ops.orders import entry_order, exit_order
 from quant_os_core.ops.resilience import CircuitBreaker
 from quant_os_core.ops.state import StateStore
@@ -83,6 +84,7 @@ class PaperTrader:
     broker_breaker: CircuitBreaker = field(
         default_factory=lambda: CircuitBreaker("broker", failure_threshold=3)
     )
+    ledger: Ledger | None = None  # trade and fee ledger; fills are recorded automatically
     _exits: ExitManager = field(default_factory=ExitManager)
 
     # ---- helpers ----------------------------------------------------------------------
@@ -157,6 +159,15 @@ class PaperTrader:
                 self.store.remove_pending(cid)
                 report.fills.append(plan.symbol)
                 price = state.average_fill_price or plan.entry_price
+                record_fill_safely(
+                    self.ledger,
+                    self.store.log,
+                    now,
+                    plan.symbol,
+                    "buy",
+                    state.filled_quantity,
+                    price,
+                )
                 self._alert(
                     "info", "filled", f"BUY {state.filled_quantity} {plan.symbol} @ {price}", report
                 )
@@ -185,6 +196,15 @@ class PaperTrader:
             self._alert("critical", "exit failed", f"{position.plan.symbol}: {exc!r}", report)
             return
         fill = state.average_fill_price or price
+        record_fill_safely(
+            self.ledger,
+            self.store.log,
+            trade.exit_time,
+            position.plan.symbol,
+            "sell",
+            position.quantity,
+            fill,
+        )
         profit = fill / position.plan.entry_price - Decimal("1")
         closed = ClosedTrade(trade.symbol, trade.exit_time, profit, trade.exit_reason)
         self.store.record_close(closed, position.quantity, position.plan.entry_price, fill)

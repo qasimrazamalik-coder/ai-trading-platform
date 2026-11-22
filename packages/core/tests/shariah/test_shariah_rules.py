@@ -155,3 +155,32 @@ def test_invalid_financials_rejected() -> None:
         _financials(market_cap=Decimal("0"))
     with pytest.raises(ValueError):
         _financials(interest_bearing_debt=Decimal("-1"))
+
+
+def test_owner_approved_fund_passes_r6_only_for_listed_etfs() -> None:
+    from quant_os_core.instruments import AssetClass, Instrument, InstrumentId, InstrumentType
+    from quant_os_core.shariah import ShariahGate, ShariahOrderContext, ShariahProfile
+
+    def etf(symbol: str, asset: AssetClass = AssetClass.ETF) -> Instrument:
+        return Instrument(
+            instrument_id=InstrumentId(venue="PAPER", symbol=symbol),
+            asset_class=asset,
+            instrument_type=InstrumentType.SPOT,
+            base_currency=symbol,
+            quote_currency="USD",
+            price_precision=2,
+            quantity_precision=4,
+        )
+
+    gate = ShariahGate(ShariahProfile(owner_approved_funds=frozenset({"SPSK"})))
+    context = ShariahOrderContext(owned_quantity=Decimal(0), free_cash=Decimal(1000))
+
+    def check(instrument: Instrument) -> tuple[bool, str]:
+        d = gate.check_order(
+            instrument, is_sell=False, quantity=Decimal(1), notional=Decimal(10), context=context
+        )
+        return d.allowed, d.rule_id
+
+    assert check(etf("SPSK")) == (True, "R6")
+    assert check(etf("SPUS")) == (False, "R6")  # not on the list: still needs screening data
+    assert check(etf("SPSK", AssetClass.EQUITY)) == (False, "R6")  # ETFs only

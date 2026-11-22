@@ -184,9 +184,9 @@ RULES: tuple[Rule, ...] = (
     _r(
         "RK-03",
         "risk",
-        "Risk per trade at most 1% of equity and position at most 20% (balanced dial); 0.5% and 15% on conservative; the Growth dial is opt-in and never above 2% and 30%. The risk engine's halal limits also cap any position at 20% of equity.",
-        "فی ٹریڈ خطرہ زیادہ سے زیادہ ایکویٹی کا 1% اور پوزیشن زیادہ سے زیادہ 20% (متوازن ڈائل)؛ محتاط پر 0.5% اور 15%؛ گروتھ ڈائل اختیاری ہے اور کبھی 2% اور 30% سے زیادہ نہیں۔ رسک انجن کی حلال حدیں بھی ہر پوزیشن کو ایکویٹی کے 20% تک محدود رکھتی ہیں۔",
-        "المخاطرة لكل صفقة 1% من رأس المال كحد أقصى والمركز 20% كحد أقصى (الوضع المتوازن)؛ و0.5% و15% في الوضع المحافظ؛ ووضع النمو اختياري ولا يتجاوز أبدًا 2% و30%. كما تحدّ قيود محرك المخاطر الحلال أي مركز بـ20% من رأس المال.",
+        "Risk per trade at most 1% of equity and position at most 20% (balanced dial); 0.5% and 15% on conservative; the Growth dial is opt-in and never above 2% per trade; every dial caps a position at 20% of equity, matching the risk engine's halal limits.",
+        "فی ٹریڈ خطرہ زیادہ سے زیادہ ایکویٹی کا 1% اور پوزیشن زیادہ سے زیادہ 20% (متوازن ڈائل)؛ محتاط پر 0.5% اور 15%؛ گروتھ ڈائل اختیاری ہے اور فی ٹریڈ کبھی 2% سے زیادہ نہیں؛ ہر ڈائل میں پوزیشن ایکویٹی کے 20% تک محدود ہے، رسک انجن کی حلال حدوں کے مطابق۔",
+        "المخاطرة لكل صفقة 1% من رأس المال كحد أقصى والمركز 20% كحد أقصى (الوضع المتوازن)؛ و0.5% و15% في الوضع المحافظ؛ ووضع النمو اختياري ولا يتجاوز أبدًا 2% لكل صفقة؛ وكل وضع يحدّ المركز بـ20% من رأس المال، وفق قيود محرك المخاطر الحلال.",
         ("GUARDRAILS.md rule 10", "risk engine"),
         (
             "quant_os_core.agents.profit_engine:dial_policy",

@@ -107,6 +107,10 @@ class ShariahProfile:
     min_tangible_asset_ratio: Decimal = Decimal("0.3333")  # R6, SS21 3/17-3/20
     extra_excluded_sectors: frozenset[str] = field(default_factory=frozenset)  # R7 optional
     extra_excluded_crypto_categories: frozenset[str] = field(default_factory=frozenset)  # R13
+    # R6 owner exception: ETFs the owner approved by name because the ratio screen cannot
+    # judge them (a sukuk fund, a physical-gold trust). ETFs only; every other instrument
+    # and every other rule still applies. Recorded in the config and in GUARDRAILS.md.
+    owner_approved_funds: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def spot_crypto_and_day_trading(cls) -> ShariahProfile:
@@ -289,6 +293,12 @@ class ShariahGate:
                 False, "R3", "order exceeds free cash; leverage is not permitted"
             )
         if instrument.asset_class in {AssetClass.EQUITY, AssetClass.ETF}:
+            approved = (
+                instrument.asset_class is AssetClass.ETF
+                and instrument.instrument_id.symbol.upper() in self.profile.owner_approved_funds
+            )
+            if financials is None and approved:
+                return ShariahDecision(True, "R6", "owner-approved fund (no ratio screen applies)")
             if financials is None:
                 return ShariahDecision(False, "R6", "no screening data; cannot verify compliance")
             screen = self.screen_company(financials)

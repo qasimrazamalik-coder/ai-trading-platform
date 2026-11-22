@@ -114,7 +114,8 @@ _DIAL: Mapping[RiskDial, tuple[str, str, str]] = {
     # risk per trade, max position fraction, portfolio volatility target
     RiskDial.CONSERVATIVE: ("0.005", "0.15", "0.08"),
     RiskDial.BALANCED: ("0.01", "0.20", "0.12"),
-    RiskDial.GROWTH: ("0.02", "0.30", "0.20"),
+    # position capped at 20% like the risk engine's halal limits (owner decision, 2026-11-22)
+    RiskDial.GROWTH: ("0.02", "0.20", "0.20"),
 }
 
 

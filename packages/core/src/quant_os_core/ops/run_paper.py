@@ -34,11 +34,12 @@ from quant_os_core.market_data.free_sources import AlpacaBars, AlpacaCryptoBars
 from quant_os_core.ops.alerts import AlertSink, MultiSink, NtfySink, StoreSink, WebhookSink
 from quant_os_core.ops.alpaca_paper import AlpacaPaperBroker
 from quant_os_core.ops.core_loop import CoreRebalancer
+from quant_os_core.ops.ledger import Ledger
 from quant_os_core.ops.paper_loop import PaperTrader, UniverseItem
 from quant_os_core.ops.resilience import CircuitBreaker, retry
 from quant_os_core.ops.signals import CoreTrendSignal, DonchianBreakout, ForecastBreakout
 from quant_os_core.ops.state import StateStore
-from quant_os_core.risk_engine import RiskEngine, default_protections
+from quant_os_core.risk_engine import RiskEngine, RiskLimits, default_protections
 from quant_os_core.shariah import (
     CompanyFinancials,
     CryptoAsset,
@@ -106,6 +107,78 @@ def _signal(config: dict[str, Any]) -> Any:
     return NeuralConfidenceSignal(primary, model, min_probability=floor)
 
 
+def _profile(config: dict[str, Any]) -> ShariahProfile:
+    """Owner profile plus any funds the owner approved by name (``owner_approved_funds``).
+
+    Each entry needs a symbol and an ``approved_on`` date, so the approval is on record.
+    """
+
+    approved: set[str] = set()
+    for entry in config.get("owner_approved_funds") or []:
+        symbol = str(entry.get("symbol", "")).strip().upper()
+        if not symbol or not entry.get("approved_on"):
+            raise ValueError("owner_approved_funds entries need a symbol and approved_on")
+        approved.add(symbol)
+    return replace(
+        ShariahProfile.spot_crypto_and_day_trading(), owner_approved_funds=frozenset(approved)
+    )
+
+
+def _risk_limits(config: dict[str, Any]) -> RiskLimits:
+    """Halal risk limits, tightened (never loosened) by the owner's settings."""
+
+    base = halal_risk_limits()
+    tighter = config.get("risk_overrides") or {}
+    return halal_risk_limits(
+        max_daily_loss_fraction=min(
+            base.max_daily_loss_fraction,
+            Decimal(str(tighter.get("max_daily_loss_fraction", base.max_daily_loss_fraction))),
+        ),
+        max_drawdown_fraction=min(
+            base.max_drawdown_fraction,
+            Decimal(str(tighter.get("max_drawdown_fraction", base.max_drawdown_fraction))),
+        ),
+    )
+
+
+def apply_settings(config: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Overlay the dashboard's validated settings file onto the config.
+
+    ``SettingsStore`` already rejects locked keys and anything outside its tighten-only
+    ranges; ``build_trader`` applies the risk numbers with ``min`` as a second guard.
+    """
+
+    if not path.exists():
+        return config
+    from quant_os_core.ops.settings_store import SettingsStore
+
+    values = SettingsStore(path).values()
+    pct = Decimal("100")
+    out = dict(config)
+    out["dial"] = values["dial"]
+    out["day_trading"] = bool(values["day_trading"])
+    out["signal"] = values["signal"]
+    core = dict(out.get("core") or {})
+    core.update(
+        mode=values["core_mode"],
+        gate=values["core_gate"],
+        band=str(Decimal(str(values["core_band_pct"])) / pct),
+        min_notional=str(values["core_min_notional"]),
+        invest_new_cash_immediately=bool(values["invest_new_cash_immediately"]),
+    )
+    out["core"] = core
+    out["policy_overrides"] = {
+        "risk_per_trade": str(Decimal(str(values["risk_per_trade_pct"])) / pct),
+        "max_position_fraction": str(Decimal(str(values["max_position_pct"])) / pct),
+        "max_trades_per_day": int(values["max_trades_per_day"]),
+    }
+    out["risk_overrides"] = {
+        "max_daily_loss_fraction": str(Decimal(str(values["daily_loss_limit_pct"])) / pct),
+        "max_drawdown_fraction": str(Decimal(str(values["max_drawdown_pct"])) / pct),
+    }
+    return out
+
+
 def _alerts(config: dict[str, Any], store: StateStore) -> AlertSink:
     sinks: list[AlertSink] = [StoreSink(store)]
     alert_cfg = config.get("alerts") or {}
@@ -129,13 +202,14 @@ def _core_rebalancer(config: dict[str, Any], store: StateStore) -> CoreRebalance
         ),
         store=store,
         universe=_universe(config),
-        shariah=ShariahGate(ShariahProfile.spot_crypto_and_day_trading()),
+        shariah=ShariahGate(_profile(config)),
         protections=default_protections(),
-        risk=RiskEngine(halal_risk_limits()),
+        risk=RiskEngine(_risk_limits(config)),
         alerts=_alerts(config, store),
         mode=CoreMode(core.get("mode", "defensive")),
         band=Decimal(str(core.get("band", "0.02"))),
         min_notional=Decimal(str(core.get("min_notional", "1.00"))),
+        ledger=Ledger(Path(config.get("state", "state/trading.db"))),
         invest_new_cash_immediately=bool(core.get("invest_new_cash_immediately", False)),
     )
 
@@ -159,12 +233,28 @@ def build_trader(config: dict[str, Any]) -> tuple[Trader, dict[str, Any]]:
     policy = dial_policy(dial, day_trading_policy() if day else None)
     if day:  # intraday trades risk half of the dial's per-trade budget
         policy = replace(policy, risk_per_trade=policy.risk_per_trade / 2)
+    tighter = config.get("policy_overrides") or {}
+    policy = replace(  # owner settings can only tighten the dial
+        policy,
+        risk_per_trade=min(
+            policy.risk_per_trade,
+            Decimal(str(tighter.get("risk_per_trade", policy.risk_per_trade))),
+        ),
+        max_position_fraction=min(
+            policy.max_position_fraction,
+            Decimal(str(tighter.get("max_position_fraction", policy.max_position_fraction))),
+        ),
+        max_trades_per_day=min(
+            policy.max_trades_per_day,
+            int(tighter.get("max_trades_per_day", policy.max_trades_per_day)),
+        ),
+    )
     pipeline = EntryPipeline(
-        shariah=ShariahGate(ShariahProfile.spot_crypto_and_day_trading()),
+        shariah=ShariahGate(_profile(config)),
         protections=default_protections(),
         governor=PlanGovernor(policy),
         council=AnalystCouncil([BoardAnalyst(board, role) for role in AnalystRole]),
-        risk=RiskEngine(halal_risk_limits()),
+        risk=RiskEngine(_risk_limits(config)),
         strategy_id="paper-loop",
         cost_model=CostModel(),
     )
@@ -183,6 +273,7 @@ def build_trader(config: dict[str, Any]) -> tuple[Trader, dict[str, Any]]:
             flatten_before_close=day,
         ),
         board=board,
+        ledger=Ledger(Path(config.get("state", "state/trading.db"))),
     )
     return trader, config
 
@@ -241,7 +332,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--once", action="store_true", help="run one step and exit")
     args = parser.parse_args(argv)
-    trader, config = build_trader(json.loads(args.config.read_text("utf-8")))
+    raw = json.loads(args.config.read_text("utf-8"))
+    from quant_os_core.ops.settings_store import settings_path_for
+
+    raw = apply_settings(
+        raw, settings_path_for(args.config, Path(raw.get("state", "state/trading.db")))
+    )
+    trader, config = build_trader(raw)
     timeframe = str(config.get("timeframe", "1Day"))
     interval = int(config.get("interval_minutes", 1440))
     lookback = int(config.get("lookback_days", 150))

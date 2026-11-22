@@ -364,3 +364,94 @@ def test_core_invests_a_deposit_immediately_when_enabled(tmp_path: Path) -> None
     broker._cash += Decimal("100")
     small = core.step(T0 + timedelta(days=7), bars)
     assert small.entries_submitted == []
+
+
+def test_runner_reads_owner_approved_funds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    from quant_os_core.ops.run_paper import build_trader
+
+    monkeypatch.setenv("APCA_API_KEY_ID", "paper-key")
+    monkeypatch.setenv("APCA_API_SECRET_KEY", "paper-secret")
+    example = Path(__file__).resolve().parents[4] / "examples" / "paper_core.json"
+    config = json.loads(example.read_text()) | {
+        "state": str(tmp_path / "c.db"),
+        "board": str(tmp_path / "b.db"),
+    }
+    core, _ = build_trader(config)
+    assert isinstance(core, CoreRebalancer)
+    assert core.shariah.profile.owner_approved_funds == frozenset({"SPSK", "AAAU"})
+    with pytest.raises(ValueError, match="approved_on"):
+        build_trader(config | {"owner_approved_funds": [{"symbol": "SPSK"}]})
+
+
+def test_core_fills_are_recorded_in_the_ledger(tmp_path: Path) -> None:
+    from quant_os_core.ops.ledger import Ledger
+
+    broker = _broker()
+    bars = {s: _series(i) for i, s in enumerate(SYMBOLS)}
+    _setup(broker, bars)
+    core = _rebalancer(tmp_path, broker)
+    core.ledger = Ledger(tmp_path / "core.db")
+    core.step(T0, bars)
+    core.step(T0 + timedelta(minutes=5), bars)  # pending buys resolve as fills
+    fills = core.ledger.fills()
+    assert sorted({f.symbol for f in fills}) == sorted(SYMBOLS)
+    assert all(f.side == "buy" and f.quantity > 0 and f.price > 0 for f in fills)
+
+
+def test_ledger_problems_never_stop_the_loop(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from quant_os_core.ops.ledger import record_fill_safely
+
+    logged: list[str] = []
+
+    class _Broken:
+        def record_fill(self, *args: object, **kwargs: object) -> int:
+            raise RuntimeError("disk full")
+
+    def log(level: str, kind: str, message: str) -> None:
+        logged.append(message)
+
+    when = datetime(2026, 1, 2, tzinfo=UTC)
+    record_fill_safely(_Broken(), log, when, "SPUS", "buy", Decimal(1), Decimal(10))  # type: ignore[arg-type]
+    record_fill_safely(_Broken(), log, when, "SPUS", "buy", Decimal(1), None)  # type: ignore[arg-type]
+    record_fill_safely(None, log, when, "SPUS", "buy", Decimal(1), Decimal(10))
+    assert len(logged) == 2 and "disk full" in logged[0] and "None" in logged[1]
+
+
+def test_settings_file_can_only_tighten_the_bot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APCA_API_KEY_ID", "paper-key")
+    monkeypatch.setenv("APCA_API_SECRET_KEY", "paper-secret")
+    import json
+
+    from quant_os_core.agents.trade_plan import PlanPolicy
+    from quant_os_core.ops.run_paper import apply_settings, build_trader
+
+    base = {"state": str(tmp_path / "t.db"), "board": str(tmp_path / "b.db"), "universe": []}
+    assert apply_settings(base, tmp_path / "missing.json") == base
+    path = tmp_path / "paper.settings.json"
+    path.write_text(
+        json.dumps(
+            {"risk_per_trade_pct": "0.5", "max_position_pct": "10", "daily_loss_limit_pct": "1"}
+        )
+    )
+    applied = apply_settings(base, path)
+    assert applied["policy_overrides"]["risk_per_trade"] == "0.005"
+    trader, _ = build_trader(applied)
+    policy: PlanPolicy = trader.pipeline.governor.policy  # type: ignore[union-attr]
+    assert policy.risk_per_trade == Decimal("0.005") and policy.max_position_fraction == Decimal(
+        "0.1"
+    )
+    assert trader.pipeline.risk.limits.max_daily_loss_fraction == Decimal("0.01")  # type: ignore[union-attr]
+    # a hand-edited config can never loosen the dial or the halal risk limits
+    loose = base | {
+        "policy_overrides": {"risk_per_trade": "0.5", "max_position_fraction": "0.9"},
+        "risk_overrides": {"max_drawdown_fraction": "0.9"},
+    }
+    trader, _ = build_trader(loose)
+    assert trader.pipeline.governor.policy.max_position_fraction == Decimal("0.20")  # type: ignore[union-attr]
+    assert trader.pipeline.risk.limits.max_drawdown_fraction == Decimal("0.15")  # type: ignore[union-attr]

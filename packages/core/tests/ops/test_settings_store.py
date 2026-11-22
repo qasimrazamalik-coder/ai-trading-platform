@@ -37,7 +37,7 @@ def test_defaults_come_from_the_enforcing_code_and_hard_limits_are_locked() -> N
     assert all(s.kind in ss.KINDS and s.description for s in ss.SETTINGS)
     # ranges never allow looser than the bot's own limits
     assert by["risk_per_trade_pct"].maximum == Decimal("2")
-    assert by["max_position_pct"].maximum == Decimal("30")
+    assert by["max_position_pct"].maximum == Decimal("20")  # 20% on every dial
     assert by["core_band_pct"].minimum == Decimal("2")
     assert by["min_edge_to_cost"].minimum == Decimal("1.5")
 
@@ -69,7 +69,7 @@ def test_save_validated_values_and_describe(tmp_path: Path) -> None:
     assert "dial" not in saved  # unchanged defaults are not written
     described = store.describe()
     row = next(s for s in described["settings"] if s["key"] == "max_position_pct")
-    assert row["value"] == "20" and row["max"] == "30" and row["locked"] is False
+    assert row["value"] == "20" and row["max"] == "20" and row["locked"] is False
     lock = next(s for s in described["settings"] if s["key"] == "allow_short")
     assert lock["locked"] and lock["value"] is False
     assert described["rejected"] == {} and described["path"] == "s.json"
@@ -114,8 +114,10 @@ def test_invalid_or_loosening_writes_are_refused(
 
 def test_growth_dial_allows_its_own_caps(tmp_path: Path) -> None:
     store = SettingsStore(tmp_path / "s.json")
-    out = store.save({"dial": "growth", "risk_per_trade_pct": "2", "max_position_pct": "30"})
+    out = store.save({"dial": "growth", "risk_per_trade_pct": "2", "max_position_pct": "20"})
     assert out["risk_per_trade_pct"] == Decimal("2") and out["dial"] == "growth"
+    with pytest.raises(SettingsError):  # growth no longer allows 30% positions
+        store.save({"dial": "growth", "risk_per_trade_pct": "2", "max_position_pct": "30"})
     out = store.save({"dial": "conservative", "risk_per_trade_pct": "0.5", "max_position_pct": 15})
     assert out["dial"] == "conservative"
     with pytest.raises(SettingsError):

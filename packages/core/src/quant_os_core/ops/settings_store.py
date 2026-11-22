@@ -124,7 +124,7 @@ SETTINGS: tuple[Setting, ...] = (
         "choice",
         RiskDial.BALANCED.value,
         "Risk dial: conservative (0.5% per trade, 15% per position), balanced (1%, 20%) or "
-        "the opt-in growth dial (2%, 30%). Caps the two settings below.",
+        "the opt-in growth dial (2%, 20%). Caps the two settings below.",
         choices=tuple(d.value for d in RiskDial),
     ),
     Setting(

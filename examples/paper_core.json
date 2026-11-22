@@ -94,5 +94,17 @@
       "symbol": "AAAU",
       "asset_class": "etf"
     }
+  ],
+  "owner_approved_funds": [
+    {
+      "symbol": "SPSK",
+      "approved_on": "2026-11-22",
+      "reason": "Sukuk fund; the AAOIFI equity ratio screen does not apply. Owner approval."
+    },
+    {
+      "symbol": "AAAU",
+      "approved_on": "2026-11-22",
+      "reason": "Physical-gold trust (no N-PORT holdings). Owner approval."
+    }
   ]
 }

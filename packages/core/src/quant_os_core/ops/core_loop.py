@@ -40,6 +40,7 @@ from quant_os_core.events import OrderIntent, Side
 from quant_os_core.execution.broker import ExecutionBroker
 from quant_os_core.execution.models import AccountSnapshot, BrokerOrderRequest
 from quant_os_core.ops.alerts import AlertSink
+from quant_os_core.ops.ledger import Ledger, record_fill_safely
 from quant_os_core.ops.orders import client_order_id
 from quant_os_core.ops.paper_loop import StepReport, UniverseItem
 from quant_os_core.ops.resilience import CircuitBreaker
@@ -81,6 +82,7 @@ class CoreRebalancer:
     min_notional: Decimal = Decimal("1.00")
     cash_buffer: Decimal = Decimal("0.01")  # keep 1% of cash unspent for fill slippage
     flatten_on_kill: bool = True
+    ledger: Ledger | None = None  # trade and fee ledger; fills are recorded automatically
     invest_new_cash_immediately: bool = False
     broker_breaker: CircuitBreaker = field(
         default_factory=lambda: CircuitBreaker("broker", failure_threshold=3)
@@ -127,6 +129,15 @@ class CoreRebalancer:
                 still.append(cid)
             elif state.status is OrderStatus.FILLED:
                 report.fills.append(cid)
+                record_fill_safely(
+                    self.ledger,
+                    self.store.log,
+                    state.updated_at,
+                    state.instrument_id.symbol,
+                    "sell" if "-sell-" in cid else "buy",
+                    state.filled_quantity,
+                    state.average_fill_price,
+                )
         self.store.set_value(_PENDING_KEY, ",".join(still))
         return bool(still)
 

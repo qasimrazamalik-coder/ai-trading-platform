@@ -21,7 +21,8 @@ instruction can relax them. Changing one needs a code change, a test, a written 
 8. Leverage fixed at 1.0. Orders above free (settled) cash are refused.
 9. Every entry has a stop, a target and a written invalidation before it is sent.
 10. Risk per trade <= 1% of equity and position <= 20% by default (0.5% for day trading).
-    The owner may opt in to the Growth dial: <= 2% per trade, position <= 30%. Never more.
+    The owner may opt in to the Growth dial: <= 2% per trade; position stays <= 20% on every dial
+    (owner decision, 2026-11-22: matches the risk engine's halal limits). Never more.
 11. Daily loss, drawdown and stop-loss-streak limits lock new entries automatically.
 12. No pyramiding; daily trade cap.
 13. Unknown state (data gap, broker error, unreconciled position) means no new entries.
@@ -42,6 +43,20 @@ it has no stop or target. The owner approved two ways to run it, chosen by `core
   prior, so the edge check measures volatility against cost, not forecast skill.
 
 Every ETF still needs fund-level `financials` for the AAOIFI screen, or R6 blocks it.
+
+### Owner decisions (22 Nov 2026)
+
+- **Owner-approved funds:** SPSK (sukuk) and AAAU (physical-gold trust) cannot be judged by
+  the equity ratio screen. The owner approved them by name in `owner_approved_funds` (config,
+  with date and reason). The exception covers ETFs on that list only; every other rule still
+  applies, and a fund that does have `financials` is still screened.
+- **Invest new deposits immediately** (`core.invest_new_cash_immediately`): kept, off by
+  default. When on, the core may buy idle cash before the monthly rebalance; buys only, through
+  the Shariah gate, protections and risk engine.
+- **Thresholds accepted:** live-readiness worst drawdown 10% / 15% / 25% (conservative /
+  balanced / growth); signal-provider vetting needs 30 graded signals, 90 days, deflated Sharpe
+  >= 0.95, hit rate >= 50%, worst drawdown <= 20%, halal compliance >= 95%.
+- **Growth dial:** position cap 20%, the same as every dial (rule 10).
 
 ## AI and automation
 

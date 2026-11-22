@@ -23,7 +23,7 @@ import csv
 import io
 import sqlite3
 from collections import deque
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -539,3 +539,28 @@ def _is_number(value: str) -> bool:
     except ArithmeticError:
         return False
     return True
+
+
+def record_fill_safely(
+    ledger: Ledger | None,
+    log: Callable[[str, str, str], None],
+    when: datetime,
+    symbol: str,
+    side: str,
+    quantity: Decimal,
+    price: Decimal | None,
+) -> None:
+    """Record a broker fill from a trading loop; a ledger problem is logged, never raised.
+
+    The ledger is bookkeeping: it must not stop the loop from managing real positions.
+    """
+
+    if ledger is None:
+        return
+    if price is None or price <= 0 or quantity <= 0:
+        log("warning", "ledger", f"fill not recorded: {side} {quantity} {symbol} @ {price}")
+        return
+    try:
+        ledger.record_fill(when, symbol, side, quantity, price, note="auto: broker fill")
+    except Exception as exc:
+        log("warning", "ledger", f"fill not recorded: {side} {quantity} {symbol}: {exc!r}")
