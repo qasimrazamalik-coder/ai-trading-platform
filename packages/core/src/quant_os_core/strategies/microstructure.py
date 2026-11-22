@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import numpy.typing as npt
 
-from quant_os_core.quant._validation import as_float_array, paired_float_arrays
+from quant_os_core.quant._validation import paired_float_arrays
 
 
 def order_book_imbalance(

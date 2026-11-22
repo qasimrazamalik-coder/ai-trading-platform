@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -11,7 +12,7 @@ import numpy.typing as npt
 class PlattCalibrator:
     """Logistic (Platt) calibration fitted only on held-out calibration data."""
 
-    _model: object | None = None
+    _model: Any = None  # sklearn LogisticRegression; sklearn ships no type stubs
 
     def fit(self, scores: npt.ArrayLike, targets: npt.ArrayLike) -> PlattCalibrator:
         from sklearn.linear_model import LogisticRegression

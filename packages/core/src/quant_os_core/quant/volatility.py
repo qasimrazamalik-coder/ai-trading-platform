@@ -22,7 +22,7 @@ def rolling_volatility(
     periods_per_year: float = 252.0,
 ) -> FloatArray:
     periods = require_positive(periods_per_year, name="periods_per_year")
-    return rolling_std(returns, window, ddof=1) * np.sqrt(periods)
+    return np.asarray(rolling_std(returns, window, ddof=1) * np.sqrt(periods), dtype=np.float64)
 
 
 def ewma_variance(

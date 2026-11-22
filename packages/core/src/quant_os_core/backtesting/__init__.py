@@ -40,7 +40,7 @@ __all__ = [
     "StrategyContext",
     "TimeInForce",
     "VectorizedBacktestResult",
+    "compare_to_benchmark",
     "run_vectorized_backtest",
     "summarize_backtest",
-    "compare_to_benchmark",
 ]

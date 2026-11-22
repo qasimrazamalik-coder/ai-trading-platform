@@ -24,6 +24,9 @@ dependencies = [
 marketdata = [
   "pyarrow>=18",
 ]
+crypto = [
+  "ccxt>=4.5,<5",  # read-only spot market data from more exchanges
+]
 ml = [
   "scikit-learn>=1.6,<2",
   "xgboost>=3,<4",
@@ -59,6 +62,7 @@ pythonpath = ["packages/core/src", "apps/api/src"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+src = ["packages/core/src", "apps/api/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -68,3 +72,24 @@ python_version = "3.12"
 strict = true
 warn_unused_configs = true
 mypy_path = ["packages/core/src", "apps/api/src"]
+
+# Third-party libraries that ship no type information (or are optional extras that may
+# be absent). Strict checking still applies to our own packages.
+[[tool.mypy.overrides]]
+module = [
+  "catboost.*",
+  "lightgbm.*",
+  "scipy.*",
+  "sklearn.*",
+  "statsmodels.*",
+  "torch.*",
+  "xgboost.*",
+  "yfinance.*",
+]
+ignore_missing_imports = true
+
+# nn.Module is Any when torch is absent, and Module.__call__ returns Any when it is present.
+[[tool.mypy.overrides]]
+module = ["quant_os_core.ml.deep"]
+disallow_subclassing_any = false
+warn_return_any = false

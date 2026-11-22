@@ -111,7 +111,7 @@ class GaussianHMMRegimeDetector:
         current = -np.inf
         iterations = 0
 
-        for iterations in range(1, self.max_iter + 1):
+        for iterations in range(1, self.max_iter + 1):  # noqa: B007 - read after the loop
             log_emission = self._emissions(x, means, variances)
             log_initial = np.log(np.maximum(initial, 1e-300))
             log_transition = np.log(np.maximum(transition, 1e-300))
@@ -173,7 +173,7 @@ class GaussianHMMRegimeDetector:
         beta = self._backward(emissions, np.log(np.maximum(fit.transition_matrix, 1e-300)))
         probabilities = np.exp(alpha + beta - likelihood)
         probabilities /= probabilities.sum(axis=1, keepdims=True)
-        return probabilities
+        return np.asarray(probabilities, dtype=np.float64)
 
     def predict(self, features: npt.ArrayLike) -> np.ndarray:
         """Return Viterbi most-likely state path."""

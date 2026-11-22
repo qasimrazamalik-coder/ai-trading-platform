@@ -8,17 +8,16 @@ from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from quant_os_core.backtesting.models import OrderSide, OrderStatus, OrderType, TimeInForce
+from quant_os_api.paper_session import PaperTradingSession
+from quant_os_core.backtesting.models import OrderSide, OrderType, TimeInForce
+from quant_os_core.execution import BrokerOrderRequest, default_adapter_catalog
+from quant_os_core.execution.models import BrokerOrderState
 from quant_os_core.instruments import AssetClass, InstrumentId
 from quant_os_core.logging import configure_logging
 from quant_os_core.market_data.corporate_actions import CorporateActionType
 from quant_os_core.market_data.models import MarketDataKind
-from quant_os_core.execution import BrokerOrderRequest, default_adapter_catalog
-from quant_os_core.execution.models import BrokerOrderState
-from quant_os_core.intelligence import SourceTier
 from quant_os_core.settings import get_settings
 from quant_os_core.strategies import create_default_registry
-from quant_os_api.paper_session import PaperTradingSession
 
 
 class MarketDataCapabilitiesResponse(BaseModel):

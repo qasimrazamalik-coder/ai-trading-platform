@@ -1,0 +1,66 @@
+{
+  "_note": "Diversified core. Every ETF needs a 'financials' block (fund-level, holdings-weighted AAOIFI ratios) or the Shariah gate blocks it with R6. Run in its own Alpaca paper account. lookback_days must cover 200+ trading days.",
+  "strategy": "core",
+  "core": {
+    "mode": "defensive",
+    "gate": "cost_guard",
+    "band": 0.02,
+    "min_notional": 1.0
+  },
+  "state": "state/core_original.db",
+  "board": "state/board.db",
+  "dial": "balanced",
+  "timeframe": "1Day",
+  "interval_minutes": 1440,
+  "lookback_days": 320,
+  "alerts": {
+    "ntfy_topic": "replace-with-a-long-private-topic-name",
+    "webhook_url": null
+  },
+  "universe": [
+    {
+      "symbol": "SPY",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "QQQ",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "GLD",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLK",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLE",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLV",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLP",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLY",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLI",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLB",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "XLU",
+      "asset_class": "etf"
+    }
+  ]
+}

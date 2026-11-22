@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from itertools import pairwise
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -70,7 +71,7 @@ class Candle(MarketDataRecord):
         return ensure_aware(value, field="close_time")
 
     @model_validator(mode="after")
-    def validate_candle(self) -> "Candle":
+    def validate_candle(self) -> Candle:
         if self.high < max(self.open, self.close, self.low):
             raise ValueError("high must be >= open, close and low")
         if self.low > min(self.open, self.close, self.high):
@@ -116,7 +117,7 @@ class Quote(MarketDataRecord):
         return value
 
     @model_validator(mode="after")
-    def validate_quote(self) -> "Quote":
+    def validate_quote(self) -> Quote:
         if self.bid_price > self.ask_price:
             raise ValueError("bid_price cannot exceed ask_price")
         return self
@@ -151,12 +152,12 @@ class OrderBookSnapshot(MarketDataRecord):
     asks: tuple[BookLevel, ...]
 
     @model_validator(mode="after")
-    def validate_book(self) -> "OrderBookSnapshot":
+    def validate_book(self) -> OrderBookSnapshot:
         if not self.bids or not self.asks:
             raise ValueError("order book must contain at least one bid and ask")
-        if any(a.price < b.price for a, b in zip(self.bids, self.bids[1:])):
+        if any(a.price < b.price for a, b in pairwise(self.bids)):
             raise ValueError("bids must be sorted descending by price")
-        if any(a.price > b.price for a, b in zip(self.asks, self.asks[1:])):
+        if any(a.price > b.price for a, b in pairwise(self.asks)):
             raise ValueError("asks must be sorted ascending by price")
         if self.bids[0].price > self.asks[0].price:
             raise ValueError("crossed order book: best bid exceeds best ask")

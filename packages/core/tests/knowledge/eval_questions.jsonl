@@ -1,0 +1,45 @@
+{"q": "what is a limit order", "source": "01-trading-basics.md"}
+{"q": "why does the spread cost me money", "source": "01-trading-basics.md"}
+{"q": "what is slippage", "source": "01-trading-basics.md"}
+{"q": "when do US stocks settle", "source": "01-trading-basics.md"}
+{"q": "what is a bar or candle", "source": "01-trading-basics.md"}
+{"q": "what is look-ahead bias with bar close", "source": "01-trading-basics.md"}
+{"q": "what does percentile rank mean", "source": "01-trading-basics.md"}
+{"q": "how is P/E ratio calculated", "source": "01-trading-basics.md"}
+{"q": "what is free cash flow", "source": "01-trading-basics.md"}
+{"q": "is momentum supported by evidence", "source": "01-trading-basics.md"}
+{"q": "do fibonacci levels work", "source": "01-trading-basics.md"}
+{"q": "what is ATR average true range", "source": "02-quant-math.md"}
+{"q": "how do I compute CAGR", "source": "02-quant-math.md"}
+{"q": "how long to grow 50 dollars to a million", "source": "02-quant-math.md"}
+{"q": "what is volatility drag", "source": "02-quant-math.md"}
+{"q": "how much gain to recover a 50% loss", "source": "02-quant-math.md"}
+{"q": "sharpe ratio formula", "source": "02-quant-math.md"}
+{"q": "sortino ratio downside deviation", "source": "02-quant-math.md"}
+{"q": "maximum drawdown definition", "source": "02-quant-math.md"}
+{"q": "what is the ulcer index", "source": "02-quant-math.md"}
+{"q": "equity curve smoothness r squared", "source": "02-quant-math.md"}
+{"q": "kelly fraction formula", "source": "02-quant-math.md"}
+{"q": "expectancy per trade win rate payoff", "source": "02-quant-math.md"}
+{"q": "fixed fractional position sizing", "source": "02-quant-math.md"}
+{"q": "RSI relative strength index formula", "source": "02-quant-math.md"}
+{"q": "z-score fat tails", "source": "02-quant-math.md"}
+{"q": "walk-forward testing purge embargo", "source": "03-strategies-and-backtesting.md"}
+{"q": "survivorship bias", "source": "03-strategies-and-backtesting.md"}
+{"q": "triple barrier labels", "source": "03-strategies-and-backtesting.md"}
+{"q": "meta labelling classifier", "source": "03-strategies-and-backtesting.md"}
+{"q": "monte carlo shuffle trade order drawdown", "source": "03-strategies-and-backtesting.md"}
+{"q": "how long should paper trading run", "source": "03-strategies-and-backtesting.md"}
+{"q": "does fine tuning an LLM improve price prediction", "source": "03-strategies-and-backtesting.md"}
+{"q": "loss aversion holding losers", "source": "04-psychology.md"}
+{"q": "revenge trading cooldown", "source": "04-psychology.md"}
+{"q": "FOMO chasing a move", "source": "04-psychology.md"}
+{"q": "gambler's fallacy losing streak", "source": "04-psychology.md"}
+{"q": "why deposits matter on a small account", "source": "04-psychology.md"}
+{"q": "are futures halal", "source": "05-halal-rules.md"}
+{"q": "is binary options trading allowed", "source": "05-halal-rules.md"}
+{"q": "AAOIFI debt ratio screen 30%", "source": "05-halal-rules.md"}
+{"q": "purification of dividends", "source": "05-halal-rules.md"}
+{"q": "is crypto halal darul uloom karachi fatwa", "source": "05-halal-rules.md"}
+{"q": "can I sell shares before settlement hanafi", "source": "05-halal-rules.md"}
+{"q": "what is salam contract", "source": "05-halal-rules.md"}

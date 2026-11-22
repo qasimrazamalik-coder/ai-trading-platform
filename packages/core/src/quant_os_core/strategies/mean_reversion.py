@@ -93,9 +93,7 @@ def bollinger_mean_reversion(
             state = 1.0
         elif state == 0.0 and price > upper[index]:
             state = -1.0
-        elif state > 0.0 and price >= middle[index]:
-            state = 0.0
-        elif state < 0.0 and price <= middle[index]:
+        elif (state > 0.0 and price >= middle[index]) or (state < 0.0 and price <= middle[index]):
             state = 0.0
         positions[index] = state
     return StrategySignals(

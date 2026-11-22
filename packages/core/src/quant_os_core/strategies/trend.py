@@ -87,9 +87,11 @@ def donchian_breakout(
             state = 1.0
         elif np.isfinite(lower_entry[index]) and closes[index] < lower_entry[index]:
             state = -1.0
-        elif state > 0.0 and np.isfinite(lower_exit[index]) and closes[index] < lower_exit[index]:
-            state = 0.0
-        elif state < 0.0 and np.isfinite(upper_exit[index]) and closes[index] > upper_exit[index]:
+        elif (
+            state > 0.0 and np.isfinite(lower_exit[index]) and closes[index] < lower_exit[index]
+        ) or (
+            state < 0.0 and np.isfinite(upper_exit[index]) and closes[index] > upper_exit[index]
+        ):
             state = 0.0
         positions[index] = state
     return StrategySignals(

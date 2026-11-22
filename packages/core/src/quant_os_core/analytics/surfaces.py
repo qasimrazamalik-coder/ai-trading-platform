@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import numpy as np
 from numpy.typing import ArrayLike
 
 from quant_os_core.analytics._validation import finite_1d, finite_2d, labels_tuple

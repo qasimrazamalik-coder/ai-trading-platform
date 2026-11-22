@@ -15,7 +15,7 @@ class Timeframe:
     seconds: int
 
     @classmethod
-    def parse(cls, value: str) -> "Timeframe":
+    def parse(cls, value: str) -> Timeframe:
         match = _TIMEFRAME_RE.fullmatch(value.strip().lower())
         if match is None:
             raise ValueError(f"unsupported fixed timeframe: {value!r}")

@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import TypeAlias
 
-DecimalLike: TypeAlias = Decimal | int | str
+type DecimalLike = Decimal | int | str
 
 
 def _decimal(value: DecimalLike, *, field: str) -> Decimal:

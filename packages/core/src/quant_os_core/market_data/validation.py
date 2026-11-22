@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from statistics import median
 
 from quant_os_core.market_data.models import Candle, Quote
@@ -84,7 +85,7 @@ class MarketDataValidator:
                 seen.add(item.timestamp)
 
         gaps: list[Gap] = []
-        for previous, current in zip(unique, unique[1:]):
+        for previous, current in pairwise(unique):
             elapsed = int((current.timestamp - previous.timestamp).total_seconds())
             if elapsed > timeframe.seconds:
                 missing = max(0, elapsed // timeframe.seconds - 1)
@@ -121,7 +122,7 @@ class MarketDataValidator:
             return []
 
         returns: list[tuple[datetime, float]] = []
-        for previous, current in zip(candles, candles[1:]):
+        for previous, current in pairwise(candles):
             value = math.log(float(current.close / previous.close))
             returns.append((current.timestamp, value))
 
