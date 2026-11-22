@@ -24,6 +24,9 @@ dependencies = [
 marketdata = [
   "pyarrow>=18",
 ]
+crypto = [
+  "ccxt>=4.5,<5",  # read-only spot market data from more exchanges
+]
 ml = [
   "scikit-learn>=1.6,<2",
   "xgboost>=3,<4",

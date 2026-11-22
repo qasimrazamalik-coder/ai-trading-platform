@@ -1,6 +1,6 @@
 # ruff: noqa: E501  (the embedded HTML page keeps its own line lengths)
 """The dashboard's single page: overview, charts, depth, quant metrics, calculators, assistant,
-setup guide. Labels come from ``GET /api/i18n`` (English, Urdu, Arabic); the English text in the
+journal, ledger and zakat, manual practice backtest, rulebook, settings and setup guide. Labels come from ``GET /api/i18n`` (English, Urdu, Arabic); the English text in the
 markup is the fallback when scripts do not run."""
 
 PAGE = """<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
@@ -58,8 +58,18 @@ ol.steps{padding-inline-start:20px;max-width:75ch}ol.steps li{margin-bottom:14px
 .out table{margin-top:10px}.out td:last-child{text-align:end;font-weight:600}.err{color:var(--down)}
 .mic{display:inline-flex;align-items:center;gap:6px}.mic[aria-pressed=true]{background:var(--down);border-color:var(--down);color:#fff}
 #answer{white-space:pre-wrap;margin-top:12px;overflow-wrap:anywhere}#answer ul{white-space:normal;color:var(--soft);font-size:13px}
+.forms{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:16px;align-items:start;margin-bottom:20px}.forms .panel{margin:0}
+textarea{font:inherit;padding:7px 10px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);color:var(--ink);width:100%;min-height:64px;resize:vertical}
+.check{display:flex!important;gap:8px;align-items:center}.check input{width:auto}
+.ok{color:var(--up)}.muted{color:var(--soft);font-size:13px}
+.set{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:6px 16px;padding:12px 0;border-bottom:1px solid var(--line)}.set:last-child{border-bottom:0}
+.set p{margin:2px 0 0;color:var(--soft);font-size:13px}.set .ctl{display:grid;gap:4px;align-content:start}.set input,.set select{width:100%}
+.set.locked .ctl{color:var(--soft)}.lock{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--gold)}
+.multi{display:flex;flex-wrap:wrap;gap:4px 12px}.multi label{display:flex;gap:4px;align-items:center;font-size:13px}
+.rule{padding:12px 0;border-bottom:1px solid var(--line)}.rule:last-child{border-bottom:0}.rule p{margin:4px 0}.rule code{font-size:12px}
+.btbar{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.btbar label{display:grid;gap:3px;font-size:13px;color:var(--soft)}.btbar input{width:110px}
 footer{color:var(--soft);font-size:13px;border-top:1px solid var(--line);padding-top:12px;margin-top:8px;max-width:75ch}
-@media (max-width:760px){.app{grid-template-columns:minmax(0,1fr)}nav{position:static;height:auto;border-inline-end:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px;align-items:center}nav h1,nav p{width:100%}nav p{margin-bottom:8px}nav button{width:auto}nav button[aria-current=page],[dir=rtl] nav button[aria-current=page]{box-shadow:inset 0 -3px 0 var(--act)}.prefs{width:100%;grid-template-columns:1fr 1fr;margin-top:8px}#rate{grid-column:1/-1}.chart{height:260px}}
+@media (max-width:760px){.app{grid-template-columns:minmax(0,1fr)}nav{position:static;height:auto;border-inline-end:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px;align-items:center}nav h1,nav p{width:100%}nav p{margin-bottom:8px}nav button{width:auto}nav button[aria-current=page],[dir=rtl] nav button[aria-current=page]{box-shadow:inset 0 -3px 0 var(--act)}.prefs{width:100%;grid-template-columns:1fr 1fr;margin-top:8px}#rate{grid-column:1/-1}.chart{height:260px}.set{grid-template-columns:minmax(0,1fr)}.btbar input{width:96px}}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
 </style></head><body><div class="app">
 <nav aria-label="Sections" data-ia="nav_label"><h1 data-i="app_title">Halal Desk</h1><p id="mode">Paper trading</p>
@@ -69,6 +79,11 @@ footer{color:var(--soft);font-size:13px;border-top:1px solid var(--line);padding
 <button data-tab="quant" data-i="tab_quant">Quant metrics</button>
 <button data-tab="calc" data-i="tab_calc">Calculators</button>
 <button data-tab="ask" data-i="tab_ask">Assistant</button>
+<button data-tab="journal" data-i="tab_journal">Journal</button>
+<button data-tab="ledger" data-i="tab_ledger">Ledger &amp; Zakat</button>
+<button data-tab="practice" data-i="tab_practice">Manual backtest</button>
+<button data-tab="rules" data-i="tab_rules">Rulebook</button>
+<button data-tab="settings" data-i="tab_settings">Settings</button>
 <button data-tab="guide" data-i="tab_guide">Setup guide</button>
 <div class="prefs"><label><span data-i="lang_label">Language</span><select id="lang"><option value="en" lang="en">English</option><option value="ur" lang="ur">اردو</option><option value="ar" lang="ar">العربية</option></select></label>
 <label><span data-i="currency_label">Currency</span><select id="cur"><option>USD</option></select></label><div id="rate" aria-live="polite"></div></div>
@@ -81,7 +96,7 @@ footer{color:var(--soft);font-size:13px;border-top:1px solid var(--line);padding
 <div class="panel"><h3 data-i="h_positions">Open positions</h3><div id="positions" class="scroll"></div></div>
 <div class="panel"><h3 data-i="h_events">Recent events</h3><div id="events" class="scroll"></div></div>
 <div class="panel"><h3 data-i="h_kill">Kill switch</h3><p class="lede" data-i="lede_kill">Stops all new trades and closes open positions on the next step. Needs your dashboard token.</p>
-<div class="toolbar"><input id="tok" class="btn" type="password" placeholder="Dashboard token" aria-label="Dashboard token" data-ip="token_ph" autocomplete="off">
+<div class="toolbar"><input id="tok" class="btn tok" type="password" placeholder="Dashboard token" aria-label="Dashboard token" data-ip="token_ph" autocomplete="off">
 <button class="btn danger" id="kill" data-i="btn_kill_on">Turn kill switch on</button><button class="btn" id="unkill" data-i="btn_kill_off">Turn kill switch off</button><span id="ks"></span></div></div>
 </section>
 
@@ -112,6 +127,64 @@ footer{color:var(--soft);font-size:13px;border-top:1px solid var(--line);padding
 <button class="btn primary" type="submit" data-i="btn_ask">Ask</button><button type="button" class="btn" id="hush" hidden data-i="btn_stop_voice">Stop speaking</button></form>
 <p id="nospeech" class="note" hidden data-i="no_speech">Your browser has no speech recognition, so the microphone is hidden. Type your question instead (Chrome and Edge support voice).</p>
 <div id="answer" aria-live="polite" dir="auto"></div></div>
+</section>
+
+<section id="journal" hidden><h2 data-i="h_journal">Trading journal</h2><p class="lede" data-i="lede_journal">Write down why you took each trade, how you felt and what you learned. Link ledger fills to score the setup.</p>
+<div class="kpis" id="jkpis"></div>
+<div class="forms"><form class="panel" id="jform" novalidate><h3 data-i="h_new_entry">New entry</h3><div class="fields">
+<label><span data-i="th_symbol">Symbol</span><input name="symbol" dir="ltr" autocomplete="off" maxlength="20" required></label>
+<label><span data-i="f_setup">Setup</span><input name="setup" maxlength="60" dir="auto" placeholder="breakout" required></label>
+<label><span data-i="f_emotion">Emotion</span><select name="emotion" id="jemo"></select></label>
+<label class="check"><input type="checkbox" name="rule_followed" value="yes" checked><span data-i="f_rule_followed">I followed my rules</span></label>
+<label><span data-i="f_reason">Why I took it</span><textarea name="reason" maxlength="2000" dir="auto"></textarea></label>
+<label><span data-i="f_lesson">Lesson</span><textarea name="lesson" maxlength="2000" dir="auto"></textarea></label>
+<label><span data-i="f_tags">Tags (comma separated)</span><input name="tags" dir="auto" autocomplete="off"></label>
+<label><span data-i="f_fill_ids">Ledger fill ids (comma separated)</span><input name="fill_ids" dir="ltr" inputmode="numeric" autocomplete="off"></label>
+<label><span data-i="f_screenshot">Screenshot path (optional)</span><input name="screenshot" dir="ltr" maxlength="260" autocomplete="off"></label>
+<label><span data-i="token_ph">Dashboard token</span><input class="tok" type="password" autocomplete="off"></label>
+</div><button class="btn primary" data-i="btn_save">Save</button><div class="out" aria-live="polite"></div></form>
+<div class="panel"><h3 data-i="h_by_setup">Win rate by setup</h3><div id="jsetup" class="scroll"></div></div></div>
+<div class="panel"><h3 data-i="h_entries">Entries</h3><div id="jlist" class="scroll"></div></div>
+</section>
+
+<section id="ledger" hidden><h2 data-i="h_ledger">Ledger and zakat</h2><p class="lede" data-i="lede_ledger">Every fill, fee, deposit, withdrawal and dividend, with realized profit (first in, first out), zakat and dividend purification.</p>
+<div class="toolbar"><label for="lyear" data-i="f_year">Year</label><input id="lyear" type="number" min="1900" max="2200" inputmode="numeric" dir="ltr" style="width:110px"><a class="btn" id="lcsv" href="/api/ledger/export.csv" download data-i="btn_export">Export CSV</a></div>
+<div class="kpis" id="lkpis"></div>
+<div class="forms" id="lforms"></div>
+<div class="forms"><form class="panel" id="zform" novalidate><h3 data-i="h_zakat_year">Zakat for the year</h3><p class="muted" data-i="d_zakat_year">2.5% of zakatable wealth once it reaches the nisab. Give the nisab, or the gold price per gram (nisab = 87.48 g).</p><div class="fields">
+<label><span data-i="f_zakatable_wealth">Zakatable wealth</span><input name="zakatable_wealth" inputmode="decimal" dir="ltr" value="1500000"></label>
+<label><span data-i="f_nisab">Nisab</span><input name="nisab" inputmode="decimal" dir="ltr"></label>
+<label><span data-i="f_gold_price_per_gram">Gold price per gram</span><input name="gold_price_per_gram" inputmode="decimal" dir="ltr"></label>
+</div><button class="btn primary" data-i="btn_calc">Calculate</button><div class="out" aria-live="polite"></div></form>
+<div class="panel"><h3 data-i="h_purify">Dividend purification</h3><p class="muted" data-i="d_purify_fund">Dividends x the fund's non-compliant revenue share, read from financials in the paper config.</p><div id="lpur" class="scroll"></div></div></div>
+<div class="panel"><h3 data-i="h_fills">Fills</h3><div id="lfills" class="scroll"></div></div>
+<div class="panel"><h3 data-i="h_cash_div">Cash, dividends and payments</h3><div id="lcash" class="scroll"></div></div>
+</section>
+
+<section id="practice" hidden><h2 data-i="h_practice">Manual backtest</h2><p class="lede" data-i="lede_practice">Practise on past bars, one bar at a time. Buys are long only and need a stop and a target. Costs are charged on every buy and sell. Nothing here can place a real order.</p>
+<div class="panel"><div class="btbar"><label><span data-i="symbol_label">Symbol</span><select id="btsym"></select></label>
+<label><span data-i="f_cash">Practice cash</span><input id="btcash" value="10000" inputmode="decimal" dir="ltr"></label>
+<label><span data-i="f_cost_bps">Cost per side (bps)</span><input id="btcost" value="10" inputmode="decimal" dir="ltr"></label>
+<button class="btn primary" id="btstart" data-i="btn_start">Start</button></div></div>
+<div class="kpis" id="btkpis"></div>
+<div class="panel"><div class="chart" id="btc"></div>
+<div class="btbar" style="margin-top:12px"><button class="btn" id="btnext" data-i="btn_next">Next bar</button><button class="btn" id="btnext5" data-i="btn_next5">Next 5 bars</button>
+<label><span data-i="th_stop">Stop</span><input id="btstop" inputmode="decimal" dir="ltr"></label>
+<label><span data-i="f_target">Target price</span><input id="bttarget" inputmode="decimal" dir="ltr"></label>
+<label><span data-i="f_fraction">Share of cash</span><input id="btfrac" value="1" inputmode="decimal" dir="ltr"></label>
+<button class="btn primary" id="btbuy" data-i="btn_buy">Buy</button><button class="btn" id="btsell" data-i="btn_sell">Sell</button></div>
+<p id="btmsg" aria-live="polite"></p></div>
+<div class="panel"><h3 data-i="h_trades">Practice trades</h3><div id="bttrades" class="scroll"></div></div>
+</section>
+
+<section id="rules" hidden><h2 data-i="h_rules">Rulebook</h2><p class="lede" data-i="lede_rules">Every hard rule the bot enforces, its source and the code that enforces it. Read-only: rules cannot be changed from the dashboard.</p>
+<div id="rlist"></div>
+</section>
+
+<section id="settings" hidden><h2 data-i="h_settings">Settings</h2><p class="lede" data-i="lede_settings">Tune the bot within safe ranges. Locked settings are hard limits: shown for reference, never editable. Saving needs your dashboard token.</p>
+<div class="toolbar"><input id="sq" class="grow" type="search" placeholder="Search settings" aria-label="Search settings" data-ip="search_ph" dir="auto">
+<input class="tok btn" type="password" placeholder="Dashboard token" aria-label="Dashboard token" data-ip="token_ph" autocomplete="off"><button class="btn primary" id="ssave" data-i="btn_save">Save</button></div>
+<p id="smsg" aria-live="polite"></p><div id="slist"></div>
 </section>
 
 <section id="guide" hidden><h2 data-i="h_guide">Setup guide</h2><p class="lede" data-ih="lede_guide_html">From a fresh Windows laptop to a running paper bot. Full version: <code>docs/SETUP_GUIDE.md</code>.</p>
@@ -237,13 +310,104 @@ async function ask(){const q=$("q").value.trim();if(!q)return;const a=$("answer"
  catch(e){a.textContent=t("ask_error")}}
 $("askf").onsubmit=e=>{e.preventDefault();ask()};
 
+/* ---- shared helpers for the journal, ledger, practice, rulebook and settings tabs ---- */
+const tokv=()=>{for(const el of document.querySelectorAll("input.tok"))if(el.value)return el.value;return""};
+function syncTok(){document.querySelectorAll("input.tok").forEach(el=>{if(el.dataset.sync)return;el.dataset.sync="1";el.addEventListener("input",()=>document.querySelectorAll("input.tok").forEach(o=>{if(o!==el)o.value=el.value}))})}
+async function post(path,body,auth){const h={"Content-Type":"application/json"};if(auth)h.Authorization="Bearer "+tokv();
+ const r=await fetch(path,{method:"POST",headers:h,body:JSON.stringify(body)});let d={};try{d=await r.json()}catch(e){}
+ if(r.status===401)throw new Error(t("ks_wrong"));if(!r.ok){const e=new Error(d.error||String(r.status));e.errors=d.errors;throw e}return d}
+const tbl=(heads,rows)=>`<table><thead><tr>${heads.map(h=>`<th>${esc(t(h))}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+const kpi=items=>items.map(([l,v,c])=>`<div class="kpi"><b class="${c||""}">${N(v)}</b><span>${esc(t(l))}</span></div>`).join("");
+const sign=v=>v==null?"":Number(v)>0?"pos":Number(v)<0?"neg":"";
+const say=(el,text,bad)=>{el.innerHTML=`<p class="${bad?"err":"ok"}">${esc(text)}</p>`};
+const ts=v=>String(v||"").slice(0,16).replace("T"," ");
+
+/* ---- journal ---- */
+const EMOS=["calm","confident","fearful","greedy","impatient","frustrated","unsure"];let jdata=null;
+function drawJournal(){const sel=$("jemo"),keep=sel.value;sel.innerHTML=EMOS.map(e=>`<option value="${e}">${esc(t("em_"+e))}</option>`).join("");if(keep)sel.value=keep;if(!jdata)return;const st=jdata.stats,list=jdata.entries;
+ $("jkpis").innerHTML=kpi([["kpi_entries",String(st.entries)],["kpi_adherence",pct(st.rule_adherence)]]);
+ const su=Object.entries(st.by_setup||{});
+ $("jsetup").innerHTML=su.length?tbl(["f_setup","kpi_entries","th_closed","kpi_win_rate"],su.map(([k,v])=>`<tr><td dir="auto">${esc(k)}</td><td>${N(v.entries)}</td><td>${N(v.closed)}</td><td>${N(pct(v.win_rate))}</td></tr>`)):`<p class="empty">${esc(t("empty_journal"))}</p>`;
+ $("jlist").innerHTML=list.length?tbl(["th_time","th_symbol","f_setup","f_emotion","th_rules_ok","f_reason","f_lesson","f_tags","th_fills"],list.map(e=>`<tr><td>${N(day(e.time))}</td><td>${N(e.symbol)}</td><td dir="auto">${esc(e.setup)}</td><td>${esc(t("em_"+e.emotion))}</td><td>${esc(e.rule_followed?t("yes"):t("no"))}</td><td dir="auto">${esc(e.reason)}</td><td dir="auto">${esc(e.lesson)}</td><td dir="auto">${esc(e.tags.join(", "))}</td><td>${N(e.fill_ids.join(", "))}</td></tr>`)):`<p class="empty">${esc(t("empty_journal"))}</p>`}
+async function loadJournal(){try{const r=await fetch("/api/journal");if(r.ok){jdata=await r.json();drawJournal()}}catch(e){}}
+$("jform").onsubmit=async e=>{e.preventDefault();const f=e.target,o=f.querySelector(".out");const b=Object.fromEntries(new FormData(f));b.rule_followed=f.rule_followed.checked;
+ try{await post("/api/journal",b,true);say(o,t("saved"));f.reason.value="";f.lesson.value="";loadJournal()}catch(err){say(o,err.message,true)}};
+
+/* ---- ledger ---- */
+const LFORMS=[
+ {id:"fill",t:"h_add_fill",f:[["symbol","th_symbol","SPUS"],["side","f_side","buy",["buy","sell"]],["quantity","th_quantity",""],["price","f_price",""],["fee","f_fee","0"],["currency","f_currency","USD"],["time","f_time",""]]},
+ {id:"cash",t:"h_add_cash",f:[["kind","f_kind","deposit",["deposit","withdrawal"]],["amount","f_amount",""],["currency","f_currency","USD"],["time","f_time",""]]},
+ {id:"dividend",t:"h_add_dividend",f:[["symbol","th_symbol","SPUS"],["amount","f_amount",""],["currency","f_currency","USD"],["time","f_time",""]]},
+ {id:"payment",t:"h_add_payment",f:[["kind","f_kind","zakat",["zakat","purification"]],["year","f_year",""],["amount","f_amount",""],["symbol","f_symbol_opt",""],["currency","f_currency","USD"]]}];
+const yearNow=String(new Date().getUTCFullYear());$("lyear").value=yearNow;
+const NUMS=["quantity","price","fee","amount","year"];
+$("lforms").innerHTML=LFORMS.map(c=>`<form class="panel" data-lform="${c.id}" novalidate><h3 data-i="${c.t}"></h3><div class="fields">${c.f.map(([k,l,v,opts])=>`<label><span data-i="${l}"></span>${opts?`<select name="${k}">${opts.map(x=>`<option value="${x}" data-i="o_${x}">${x}</option>`).join("")}</select>`:`<input name="${k}" value="${esc(k==="year"?yearNow:v)}" dir="ltr"${NUMS.includes(k)?' inputmode="decimal"':""}${k==="time"?' placeholder="2026-11-22T10:00:00+05:00"':""} autocomplete="off">`}</label>`).join("")}<label><span data-i="token_ph"></span><input class="tok" type="password" autocomplete="off"></label></div><button class="btn primary" data-i="btn_save">Save</button><div class="out" aria-live="polite"></div></form>`).join("");
+syncTok();
+document.querySelectorAll("[data-lform]").forEach(f=>f.onsubmit=async e=>{e.preventDefault();const o=f.querySelector(".out");const b=Object.fromEntries(new FormData(f));
+ try{const d=await post("/api/ledger/"+f.dataset.lform,b,true);say(o,t("saved_id",{id:d.id}));loadLedger()}catch(err){say(o,err.message,true)}});
+let ldata=null;
+function drawLedger(){const d=ldata;if(!d)return;const p=d.pnl,pu=d.purification;
+ $("lkpis").innerHTML=kpi([["kpi_realized",group(p.total),sign(p.total)],["kpi_fees",group(p.fees)],["kpi_deposits",group(d.deposits)],["kpi_withdrawals",group(d.withdrawals)],["kpi_purify_due",group(pu.outstanding)],["kpi_zakat_paid",group(d.zakat_paid)]]);
+ $("lpur").innerHTML=pu.funds.length?tbl(["th_symbol","th_dividends","th_ratio","th_purify","th_paid","th_outstanding"],pu.funds.map(f=>`<tr><td>${N(f.symbol)}</td><td>${N(group(f.dividends))}</td><td>${f.ratio==null?esc(t("no_ratio")):N((Number(f.ratio)*100).toFixed(3)+"%")}</td><td>${N(group(f.purify))}</td><td>${N(group(f.paid))}</td><td>${N(group(f.outstanding))}</td></tr>`)):`<p class="empty">${esc(t("empty_dividends"))}</p>`;
+ $("lfills").innerHTML=d.fills.length?tbl(["th_id","th_time","th_symbol","f_side","th_quantity","f_price","f_fee","f_currency"],d.fills.map(f=>`<tr><td>${N(f.id)}</td><td>${N(ts(f.time))}</td><td>${N(f.symbol)}</td><td>${esc(t("o_"+f.side))}</td><td>${N(f.quantity)}</td><td>${N(f.price)}</td><td>${N(f.fee)}</td><td>${N(f.currency)}</td></tr>`)):`<p class="empty">${esc(t("empty_fills"))}</p>`;
+ const rows=[...d.cash.map(c=>[c.time,t("o_"+c.kind),"",c.amount,c.currency]),...d.dividends.map(v=>[v.time,t("o_dividend"),v.symbol,v.amount,v.currency]),...d.payments.map(v=>[v.time,t("o_"+v.kind)+" "+v.year,v.symbol,v.amount,v.currency])].sort((a,b)=>a[0]<b[0]?1:-1);
+ $("lcash").innerHTML=rows.length?tbl(["th_time","f_kind","th_symbol","f_amount","f_currency"],rows.map(r=>`<tr><td>${N(ts(r[0]))}</td><td>${esc(r[1])}</td><td>${N(r[2])}</td><td>${N(group(r[3]))}</td><td>${N(r[4])}</td></tr>`)):`<p class="empty">${esc(t("empty_cash"))}</p>`}
+async function loadLedger(){try{const r=await fetch("/api/ledger?year="+encodeURIComponent($("lyear").value||yearNow));if(r.ok){ldata=await r.json();drawLedger()}}catch(e){}}
+$("lyear").onchange=loadLedger;
+$("zform").onsubmit=async e=>{e.preventDefault();const f=e.target,o=f.querySelector(".out");const b=Object.fromEntries(new FormData(f));b.year=$("lyear").value||yearNow;
+ try{const d=await post("/api/ledger/zakat",b,false);o.innerHTML=`<table><tbody>${["nisab","above_nisab","due","paid","outstanding"].map(k=>`<tr><td>${esc(t("r_"+k))}</td><td>${N(group(d[k]))}</td></tr>`).join("")}</tbody></table>`}catch(err){say(o,err.message,true)}};
+
+/* ---- manual backtest ---- */
+let bt=null;
+async function btSymbols(){try{const s=await (await fetch("/api/symbols")).json();$("btsym").innerHTML=s.map(x=>`<option>${esc(x)}</option>`).join("")||`<option disabled>${esc(t("no_csv"))}</option>`;if(s.includes("SPUS"))$("btsym").value="SPUS"}catch(e){}}
+function drawBt(){const el=$("btc");if(!bt){el.innerHTML=`<p class="empty">${esc(t("empty_practice"))}</p>`;$("btkpis").innerHTML="";$("bttrades").innerHTML="";return}const s=bt.stats;
+ $("btkpis").innerHTML=kpi([["kpi_price",bt.price],["kpi_cash",group(bt.cash)],["kpi_equity",group(s.equity)],["kpi_total_return",s.return_pct+"%",sign(s.return_pct)],["kpi_worst_drop",s.max_drawdown_pct+"%","neg"],["kpi_trades",String(s.trades)],["kpi_win_rate",s.win_rate==null?"\u2013":pct(Number(s.win_rate))],["kpi_avg_r",s.avg_r==null?"\u2013":s.avg_r],["kpi_costs",group(s.costs)],["kpi_left",String(bt.remaining)]]);
+ if(LC){const c=mk("btc",320);const cs=c.addCandlestickSeries({upColor:css("--up"),downColor:css("--down"),borderVisible:false,wickUpColor:css("--up"),wickDownColor:css("--down")});cs.setData(dedupe(bt.bars.map(b=>({time:b.time,open:+b.open,high:+b.high,low:+b.low,close:+b.close}))));
+  if(bt.position){[["stop","--down","th_stop"],["target","--up","f_target"],["entry","--act","th_entry"]].forEach(([k,col,lab])=>cs.createPriceLine({price:+bt.position[k],color:css(col),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:t(lab)}))}c.timeScale().fitContent()}else noLib("btc");
+ $("btmsg").textContent=bt.position?t("bt_holding",{qty:bt.position.quantity,entry:bt.position.entry,stop:bt.position.stop,target:bt.position.target}):(bt.finished?t("bt_done"):"");
+ $("bttrades").innerHTML=bt.trades.length?tbl(["th_opened","th_closed_at","th_quantity","th_entry","th_exit","th_reason","th_pnl","th_r"],bt.trades.slice().reverse().map(x=>`<tr><td>${N(x.opened)}</td><td>${N(x.closed)}</td><td>${N(x.quantity)}</td><td>${N(x.entry)}</td><td>${N(x.exit)}</td><td>${esc(t("bt_"+x.reason))}</td><td class="${sign(x.pnl)}">${N(x.pnl)}</td><td>${N(x.r??"\u2013")}</td></tr>`)):`<p class="empty">${esc(t("empty_trades"))}</p>`}
+async function btDo(path,body){try{bt=await post(path,body,false);drawBt()}catch(err){$("btmsg").innerHTML=`<span class="err">${esc(err.message)}</span>`}}
+$("btstart").onclick=()=>btDo("/api/bt/start",{symbol:$("btsym").value,cash:$("btcash").value,cost_bps:$("btcost").value});
+$("btnext").onclick=()=>bt&&btDo("/api/bt/next",{session:bt.session,steps:1});$("btnext5").onclick=()=>bt&&btDo("/api/bt/next",{session:bt.session,steps:5});
+$("btbuy").onclick=()=>bt&&btDo("/api/bt/buy",{session:bt.session,stop:$("btstop").value,target:$("bttarget").value,fraction:$("btfrac").value});
+$("btsell").onclick=()=>bt&&btDo("/api/bt/sell",{session:bt.session});
+
+/* ---- rulebook (read-only) ---- */
+let rdata=null;const LOCK=`<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
+function drawRules(){if(!rdata)return;const g={};rdata.rules.forEach(r=>(g[r.group]=g[r.group]||[]).push(r));
+ $("rlist").innerHTML=Object.entries(g).map(([k,rs])=>`<div class="panel"><h3>${esc(t("rg_"+k))}</h3>${rs.map(r=>`<div class="rule"><b>${N(r.id)}</b> <span class="lock">${LOCK}${esc(t("read_only"))}</span><p dir="auto">${esc(r.text[I.lang]||r.text.en)}</p><div class="muted">${esc(t("th_source"))}: <span dir="ltr">${esc(r.sources.join("; "))}</span></div><div class="muted">${esc(t("th_enforced"))}: ${r.enforced_by.map(e=>`<code title="${esc(e.file)}">${esc(e.ref)}</code>`).join(" ")}</div></div>`).join("")}</div>`).join("")}
+async function loadRules(){try{const r=await fetch("/api/rulebook?lang="+encodeURIComponent(I.lang));if(r.ok){rdata=await r.json();drawRules()}}catch(e){}}
+
+/* ---- settings ---- */
+let sdata=null;const sdirty={};
+function ctl(s){const v=s.key in sdirty?sdirty[s.key]:s.value;const dis=s.locked?" disabled":"";const id="s_"+s.key;
+ if(s.kind==="bool")return `<label class="check"><input type="checkbox" id="${id}" data-k="${s.key}"${v?" checked":""}${dis}><span>${esc(v?t("on"):t("off"))}</span></label>`;
+ if(s.kind==="choice")return `<select id="${id}" data-k="${s.key}"${dis}>${s.choices.map(c=>`<option value="${esc(c)}"${c===v?" selected":""}>${esc(I.strings["o_"+c]||c)}</option>`).join("")}</select>`;
+ if(s.kind==="multi")return `<div class="multi">${s.choices.map(c=>`<label><input type="checkbox" data-k="${s.key}" data-c="${esc(c)}"${v.includes(c)?" checked":""}${dis}>${esc(I.strings["o_"+c]||c)}</label>`).join("")}</div>`;
+ if(s.kind==="list")return `<div dir="ltr">${v.map(x=>`<code>${esc(x)}</code>`).join(" ")}</div>`;
+ const range=s.min!=null?`<span class="muted">${esc(t("range_fmt",{min:s.min,max:s.max}))}${s.unit?" "+esc(s.unit):""}</span>`:"";
+ return `<input id="${id}" data-k="${s.key}" value="${esc(v)}" dir="ltr"${s.kind==="text"?"":' inputmode="decimal"'} autocomplete="off"${dis}>${range}`}
+function drawSettings(){if(!sdata)return;const q=$("sq").value.trim().toLowerCase();
+ $("slist").innerHTML=sdata.groups.map(g=>{const rows=sdata.settings.filter(s=>s.group===g&&(!q||[s.key,s.description,I.strings["s_"+s.key]||"",s.lock_reason].join(" ").toLowerCase().includes(q)));
+  if(!rows.length)return"";return `<div class="panel"><h3>${esc(t("sg_"+g))}</h3>${rows.map(s=>`<div class="set${s.locked?" locked":""}"><div><label for="s_${s.key}"><b>${esc(I.strings["s_"+s.key]||s.key)}</b></label><p dir="ltr">${esc(s.description)}</p>${s.locked?`<p class="lock">${LOCK}${esc(t("locked"))}: <span dir="ltr">${esc(s.lock_reason)}</span></p>`:""}<p class="muted"><code>${esc(s.key)}</code> · ${esc(t("default_fmt",{v:Array.isArray(s.default)?s.default.join(", "):String(s.default)}))}</p></div><div class="ctl">${ctl(s)}<span class="err" id="se_${s.key}"></span></div></div>`).join("")}</div>`}).join("")||`<p class="empty">${esc(t("no_match"))}</p>`;
+ document.querySelectorAll("#slist [data-k]").forEach(el=>el.onchange=()=>{const k=el.dataset.k;const s=sdata.settings.find(x=>x.key===k);
+  if(s.kind==="bool")sdirty[k]=el.checked;else if(s.kind==="multi")sdirty[k]=[...document.querySelectorAll(`#slist [data-k="${k}"]:checked`)].map(x=>x.dataset.c);else sdirty[k]=el.value;$("smsg").textContent=t("unsaved")})}
+async function loadSettings(){try{const r=await fetch("/api/settings");if(r.ok){sdata=await r.json();drawSettings()}}catch(e){}}
+$("sq").oninput=drawSettings;
+$("ssave").onclick=async()=>{document.querySelectorAll("[id^=se_]").forEach(x=>x.textContent="");if(!Object.keys(sdirty).length){$("smsg").textContent=t("nothing_changed");return}
+ try{sdata=await post("/api/settings",sdirty,true);Object.keys(sdirty).forEach(k=>delete sdirty[k]);$("smsg").innerHTML=`<span class="ok">${esc(t("saved"))}</span>`;drawSettings()}
+ catch(err){$("smsg").innerHTML=`<span class="err">${esc(err.message)}</span>`;Object.entries(err.errors||{}).forEach(([k,v])=>{const el=$("se_"+k);if(el)el.textContent=v})}};
+const LOADERS={journal:loadJournal,ledger:loadLedger,practice:()=>{if(!$("btsym").options.length)btSymbols();drawBt()},rules:loadRules,settings:loadSettings};
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{const f=LOADERS[b.dataset.tab];if(f)f()}));
+
 /* ---- language ---- */
 function apply(){const h=document.documentElement;h.lang=I.lang;h.dir=I.dir;document.title=t("app_title");
  document.querySelectorAll("[data-i]").forEach(el=>{if(I.strings[el.dataset.i]!=null)el.textContent=I.strings[el.dataset.i]});
  document.querySelectorAll("[data-ih]").forEach(el=>{if(I.strings[el.dataset.ih]!=null)el.innerHTML=I.strings[el.dataset.ih]});
  document.querySelectorAll("[data-ip]").forEach(el=>{el.placeholder=t(el.dataset.ip);el.setAttribute("aria-label",t(el.dataset.ip))});
  document.querySelectorAll("[data-ia]").forEach(el=>el.setAttribute("aria-label",t(el.dataset.ia)));
- listening(!!rec);rateLine();Object.keys(results).forEach(renderOut);if(last)state(last)}
+ listening(!!rec);rateLine();Object.keys(results).forEach(renderOut);if(last)state(last);
+ drawJournal();drawLedger();drawBt();if(rdata)loadRules();drawSettings()}
 async function setLang(code){try{const r=await fetch("/api/i18n?lang="+encodeURIComponent(code));if(r.ok)I=await r.json()}catch(e){}
  $("lang").value=I.lang;store.set("qos.lang",I.lang);apply()}
 $("lang").onchange=()=>setLang($("lang").value);

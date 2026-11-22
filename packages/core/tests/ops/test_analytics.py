@@ -194,3 +194,148 @@ def test_dashboard_ask_returns_503_when_knowledge_is_missing(
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_dashboard_journal_ledger_practice_rulebook_and_settings(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state" / "t.db")
+    data = tmp_path / "ohlc"
+    _csv(data, "SPUS")
+    config = tmp_path / "paper_core.json"
+    fund = {"symbol": "SPUS", "financials": {"total_revenue": "100", "noncompliant_revenue": "2"}}
+    config.write_text(json.dumps({"universe": [fund]}))
+    token = "t" * 24
+    handler = make_handler(store, token, data, ask=lambda q, lang: {}, config_path=config)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+    def call(path: str, body: Any = None, auth: str | None = token) -> tuple[int, Any]:
+        payload = None if body is None else json.dumps(body).encode()
+        headers = {"Authorization": f"Bearer {auth}"} if auth else {}
+        req = urllib.request.Request(
+            base + path, data=payload, method="POST" if payload else "GET", headers=headers
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                raw = resp.read()
+                kind = resp.headers.get("Content-Type", "")
+                return resp.status, raw.decode() if "csv" in kind else json.loads(raw)
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read() or b"{}")
+
+    def fill(**fields: str) -> tuple[int, Any]:
+        return call("/api/ledger/fill", {"symbol": "SPUS", **fields})
+
+    try:
+        # every write needs the token
+        assert call("/api/ledger/fill", {"symbol": "SPUS"}, auth=None)[0] == 401
+        assert call("/api/settings", {"language": "ur"}, auth="wrong" * 5)[0] == 401
+        assert call("/api/journal", {"symbol": "SPUS"}, auth=None)[0] == 401
+        code, buy = fill(
+            side="buy", quantity="10", price="40", fee="1", time="2026-03-02T10:00+05:00"
+        )
+        assert code == 200 and buy["id"] > 0
+        code, sell = fill(side="sell", quantity="10", price="45")
+        assert code == 200
+        assert fill(side="sell", quantity="1", price="45")[0] == 400  # would be a short sale
+        assert fill(side="buy", quantity="1", price="1", time="2026-01-01T00:00")[0] == 400
+        assert call("/api/ledger/fill", {"symbol": 5, "side": "buy"})[0] == 400
+        assert call("/api/ledger/fill", ["not", "an", "object"])[0] == 400
+        assert call("/api/ledger/cash", {"kind": "deposit", "amount": "1000"})[0] == 200
+        dividend = {"symbol": "SPUS", "amount": "100", "time": "2026-06-01T00:00:00+00:00"}
+        assert call("/api/ledger/dividend", dividend)[0] == 200
+        assert (
+            call("/api/ledger/payment", {"kind": "zakat", "year": "2026", "amount": "5"})[0] == 200
+        )
+        code, ledger = call("/api/ledger?year=2026")
+        assert code == 200 and ledger["pnl"]["total"] == "49.00"
+        assert ledger["purification"]["funds"][0]["purify"] == "2.00"
+        assert ledger["deposits"] == "1000.00" and ledger["zakat_paid"] == "5.00"
+        assert call("/api/ledger?year=abc")[0] == 400
+        code, csv_text = call("/api/ledger/export.csv")
+        assert code == 200 and csv_text.startswith("type,time")
+        zakat_in = {"year": 2026, "zakatable_wealth": "1000000", "nisab": "100000"}
+        code, zakat = call("/api/ledger/zakat", zakat_in, auth=None)
+        assert code == 200 and zakat["due"] == "25000.00" and zakat["outstanding"] == "24995.00"
+        gold_in = {"year": 2026, "zakatable_wealth": "10", "gold_price_per_gram": "100"}
+        code, gold = call("/api/ledger/zakat", gold_in, auth=None)
+        assert code == 200 and gold["above_nisab"] is False
+
+        entry_in = {
+            "symbol": "SPUS",
+            "setup": "breakout",
+            "reason": "range break",
+            "emotion": "calm",
+            "rule_followed": True,
+            "tags": "trend, etf",
+            "fill_ids": f"{buy['id']},{sell['id']}",
+        }
+        code, entry = call("/api/journal", entry_in)
+        assert code == 200 and entry["id"] > 0
+        bad_flag = {"symbol": "SPUS", "setup": "x", "emotion": "calm", "rule_followed": "maybe"}
+        assert call("/api/journal", bad_flag)[0] == 400
+        bad_tags = {"symbol": "SPUS", "setup": "x", "emotion": "calm", "tags": 5}
+        assert call("/api/journal", bad_tags)[0] == 400
+        code, journal = call("/api/journal")
+        assert journal["stats"]["by_setup"]["breakout"]["win_rate"] == 1.0
+        assert journal["entries"][0]["tags"] == ["etf", "trend"]
+
+        code, view = call("/api/bt/start", {"symbol": "SPUS", "start": 40}, auth=None)
+        assert code == 200 and view["revealed"] == 41
+        sid = view["session"]
+        assert call("/api/bt/next", {"session": sid, "steps": 2}, auth=None)[1]["revealed"] == 43
+        assert call("/api/bt/view", {"session": "nope"}, auth=None)[0] == 404
+        assert call("/api/bt/start", {"symbol": "../x"}, auth=None)[0] == 400
+
+        code, rules = call("/api/rulebook?lang=ar")
+        assert code == 200 and rules["editable"] is False and rules["lang"] == "ar"
+
+        code, described = call("/api/settings")
+        assert code == 200 and any(s["locked"] for s in described["settings"])
+        code, out = call("/api/settings", {"max_leverage": 3, "language": "ur"})
+        assert code == 400 and "locked" in out["errors"]["max_leverage"]
+        code, out = call("/api/settings", {"language": "ur"})
+        assert code == 200
+        assert next(s for s in out["settings"] if s["key"] == "language")["value"] == "ur"
+        assert (tmp_path / "paper_core.settings.json").is_file()
+        assert call("/api/nope", {"x": 1})[0] == 404
+
+        page = urllib.request.urlopen(base + "/", timeout=5).read().decode()
+        tabs = ("journal", "ledger", "practice", "rules", "settings")
+        for label in ("Kill switch", "<svg", *(f'data-tab="{t}"' for t in tabs)):
+            assert label in page
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_dashboard_helpers_and_missing_config(tmp_path: Path) -> None:
+    from quant_os_core.ops import dashboard
+
+    assert dashboard._flag({"x": "on"}, "x") is True and dashboard._flag({}, "x") is False
+    with pytest.raises(ValueError):
+        dashboard._flag({"x": 3}, "x")
+    assert dashboard._items(None) == [] and dashboard._items(["a", 1]) == ["a", "1"]
+    with pytest.raises(ValueError):
+        dashboard._items({"a": 1})
+    assert dashboard._text({"k": None}, "k", "d") == "d"
+    with pytest.raises(ValueError):
+        dashboard._when({"time": 5})
+    assert dashboard._when({}).tzinfo is not None
+    assert dashboard._year_of({}) is not None and dashboard._year_of({"year": ["1800"]}) is None
+    store = StateStore(tmp_path / "t.db")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{nope")
+    for config in (None, bad):
+        handler = make_handler(
+            store, "x" * 20, tmp_path, ask=lambda q, lang: {}, config_path=config
+        )
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            url = f"http://127.0.0.1:{httpd.server_address[1]}/api/ledger"
+            body = json.loads(urllib.request.urlopen(url, timeout=5).read())
+            assert body["purification"]["funds"] == []
+        finally:
+            httpd.shutdown()
+            httpd.server_close()

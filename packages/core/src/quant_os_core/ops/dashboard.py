@@ -1,10 +1,14 @@
 """Local dashboard: equity, drawdown, quant metrics, charts, order-book depth, kill switch,
-calculators, currency conversion, English/Urdu/Arabic labels and a knowledge assistant.
+calculators, currency conversion, English/Urdu/Arabic labels, a knowledge assistant, the trading
+journal, the trade and fee ledger with zakat and purification, a manual practice backtester, the
+read-only rulebook and the settings panel.
 
     QUANT_OS_DASHBOARD_TOKEN=<random> python -m quant_os_core.ops.dashboard \
-        --state state/trading.db --data data/ohlc
+        --state state/trading.db --data data/ohlc --config paper_core.json
 
-Serves on 127.0.0.1 only. Reading is open on localhost; the kill switch needs the token.
+Serves on 127.0.0.1 only. Reading is open on localhost; the kill switch and every write to the
+settings, journal or ledger need the token. Practice sessions live in memory and never reach the
+order path.
 """
 
 from __future__ import annotations
@@ -16,16 +20,21 @@ import os
 import sys
 import threading
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from quant_os_core.ops import analytics, calculators, i18n
+from quant_os_core.ops import analytics, calculators, i18n, rulebook
 from quant_os_core.ops.dashboard_page import PAGE
 from quant_os_core.ops.fx import FxService, FxUnavailable
+from quant_os_core.ops.journal import Journal
+from quant_os_core.ops.ledger import Ledger, noncompliant_ratios
+from quant_os_core.ops.manual_backtest import ManualBacktester
+from quant_os_core.ops.settings_store import SettingsError, SettingsStore, settings_path_for
 from quant_os_core.ops.state import StateStore
 
 MAX_BODY = 10_000
@@ -127,12 +136,27 @@ def make_handler(
     fx: FxService | None = None,
     knowledge_dir: Path = Path("docs/knowledge"),
     ask: Ask | None = None,
+    config_path: Path | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     """Request handler class. ``fx`` defaults to rates cached next to the state database
-    (``<state dir>/fx_rates.json``); ``ask`` defaults to ``knowledge_asker(knowledge_dir)``."""
+    (``<state dir>/fx_rates.json``); ``ask`` defaults to ``knowledge_asker(knowledge_dir)``.
+    ``config_path`` (the paper config) supplies each fund's non-compliant revenue ratio for
+    purification; the settings JSON is written next to it (or next to the state database)."""
 
     rates = fx or FxService(cache_path=Path(store.path).parent / "fx_rates.json")
     answer = ask or knowledge_asker(knowledge_dir)
+    ledger = Ledger(Path(store.path))
+    journal = Journal(Path(store.path), ledger)
+    settings = SettingsStore(settings_path_for(config_path, Path(store.path)))
+    practice = ManualBacktester(data_dir)
+
+    def ratios() -> dict[str, Decimal]:
+        if config_path is None:
+            return {}
+        try:
+            return noncompliant_ratios(json.loads(config_path.read_text("utf-8")))
+        except (OSError, ValueError, AttributeError):
+            return {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:
@@ -177,6 +201,30 @@ def make_handler(
                 self._fx(lambda: rates.table((query.get("base") or ["USD"])[0][:5]))
             elif url.path == "/api/fx/convert":
                 self._fx(lambda: self._convert(query))
+            elif url.path == "/api/rulebook":
+                self._json(200, rulebook.as_json((query.get("lang") or ["en"])[0]))
+            elif url.path == "/api/settings":
+                self._json(200, settings.describe())
+            elif url.path == "/api/journal":
+                self._json(
+                    200,
+                    {"entries": [e.as_dict() for e in journal.entries()], "stats": journal.stats()},
+                )
+            elif url.path == "/api/ledger":
+                year = _year_of(query)
+                if year is None:
+                    self._json(400, {"error": "year must be a whole number"})
+                else:
+                    self._json(200, ledger.summary(year, ratios()))
+            elif url.path == "/api/ledger/export.csv":
+                body = ledger.export_csv().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", 'attachment; filename="ledger.csv"')
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
             else:
                 self._send(404, b"{}", "application/json")
 
@@ -260,12 +308,141 @@ def make_handler(
                     },
                 )
 
+        def _authorized(self) -> bool:
+            """Bearer-token check shared by every write; sends 401 when it fails."""
+
+            header = self.headers.get("Authorization", "")
+            ok = len(token) >= 16 and hmac.compare_digest(
+                header.encode(), f"Bearer {token}".encode()
+            )
+            if not ok:
+                self._send(401, b'{"error":"unauthorized"}', "application/json")
+            return ok
+
+        def _run(self, action: Callable[[Mapping[str, Any]], Any], *, auth: bool) -> None:
+            if auth and not self._authorized():
+                return
+            payload = self._body()
+            if payload is None:
+                return
+            if not isinstance(payload, dict):
+                self._json(400, {"error": "send a JSON object"})
+                return
+            try:
+                self._json(200, action(payload))
+            except SettingsError as exc:
+                self._json(400, {"error": "invalid settings", "errors": exc.errors})
+            except KeyError as exc:
+                self._json(404, {"error": str(exc.args[0]) if exc.args else "not found"})
+            except (ValueError, ArithmeticError, TypeError) as exc:
+                self._json(400, {"error": str(exc)})
+
+        def _routes(self) -> dict[str, tuple[Callable[[Mapping[str, Any]], Any], bool]]:
+            """Path -> (action, needs token). Practice and zakat maths change no records."""
+
+            def journal_add(p: Mapping[str, Any]) -> dict[str, Any]:
+                entry_id = journal.add(
+                    _when(p),
+                    _text(p, "symbol"),
+                    _text(p, "setup"),
+                    _text(p, "reason"),
+                    _text(p, "emotion"),
+                    _flag(p, "rule_followed"),
+                    screenshot=_text(p, "screenshot"),
+                    lesson=_text(p, "lesson"),
+                    tags=_items(p.get("tags")),
+                    fill_ids=[
+                        int(calculators.parse_decimal({"id": i}, "id"))
+                        for i in _items(p.get("fill_ids"))
+                    ],
+                )
+                return {"id": entry_id}
+
+            def fill(p: Mapping[str, Any]) -> dict[str, Any]:
+                return {
+                    "id": ledger.record_fill(
+                        _when(p),
+                        _text(p, "symbol"),
+                        _text(p, "side"),
+                        calculators.parse_decimal(p, "quantity"),
+                        calculators.parse_decimal(p, "price"),
+                        calculators.parse_decimal(p, "fee", "0"),
+                        _text(p, "currency", "USD"),
+                        _text(p, "note"),
+                    )
+                }
+
+            def cash(p: Mapping[str, Any]) -> dict[str, Any]:
+                return {
+                    "id": ledger.record_cash(
+                        _when(p),
+                        _text(p, "kind"),
+                        calculators.parse_decimal(p, "amount"),
+                        _text(p, "currency", "USD"),
+                        _text(p, "note"),
+                    )
+                }
+
+            def dividend(p: Mapping[str, Any]) -> dict[str, Any]:
+                return {
+                    "id": ledger.record_dividend(
+                        _when(p),
+                        _text(p, "symbol"),
+                        calculators.parse_decimal(p, "amount"),
+                        _text(p, "currency", "USD"),
+                        _text(p, "note"),
+                    )
+                }
+
+            def payment(p: Mapping[str, Any]) -> dict[str, Any]:
+                return {
+                    "id": ledger.record_payment(
+                        _when(p),
+                        _text(p, "kind"),
+                        int(calculators.parse_decimal(p, "year")),
+                        calculators.parse_decimal(p, "amount"),
+                        _text(p, "currency", "USD"),
+                        _text(p, "symbol"),
+                        _text(p, "note"),
+                    )
+                }
+
+            def zakat(p: Mapping[str, Any]) -> dict[str, Any]:
+                nisab = p.get("nisab")
+                return ledger.zakat(
+                    int(calculators.parse_decimal(p, "year")),
+                    calculators.parse_decimal(p, "zakatable_wealth"),
+                    nisab=None if nisab in (None, "") else calculators.parse_decimal(p, "nisab"),
+                    gold_price_per_gram=None
+                    if p.get("gold_price_per_gram") in (None, "")
+                    else calculators.parse_decimal(p, "gold_price_per_gram"),
+                )
+
+            def practise(action: str) -> Callable[[Mapping[str, Any]], Any]:
+                return lambda p: practice.act(_text(p, "session"), action, p)
+
+            return {
+                "/api/settings": (lambda p: (settings.save(p), settings.describe())[1], True),
+                "/api/journal": (journal_add, True),
+                "/api/ledger/fill": (fill, True),
+                "/api/ledger/cash": (cash, True),
+                "/api/ledger/dividend": (dividend, True),
+                "/api/ledger/payment": (payment, True),
+                "/api/ledger/zakat": (zakat, False),
+                "/api/bt/start": (practice.start, False),
+                **{f"/api/bt/{a}": (practise(a), False) for a in ("next", "buy", "sell", "view")},
+            }
+
         def do_POST(self) -> None:
             if self.path.startswith("/api/calc/"):
                 self._calc(self.path.removeprefix("/api/calc/"))
                 return
             if self.path == "/api/ask":
                 self._ask()
+                return
+            route = self._routes().get(self.path)
+            if route is not None:
+                self._run(route[0], auth=route[1])
                 return
             if self.path != "/api/kill":
                 self._send(404, b"{}", "application/json")
@@ -292,11 +469,67 @@ def make_handler(
     return Handler
 
 
+def _when(payload: Mapping[str, Any]) -> datetime:
+    """``payload["time"]`` as an aware datetime (ISO 8601 with offset), or now in UTC."""
+
+    raw = payload.get("time")
+    if raw in (None, ""):
+        return datetime.now(UTC)
+    if not isinstance(raw, str) or len(raw) > 40:
+        raise ValueError("time must be an ISO 8601 date and time")
+    when = datetime.fromisoformat(raw)
+    if when.tzinfo is None:
+        raise ValueError("time needs a timezone, for example 2026-11-22T10:00:00+05:00")
+    return when
+
+
+def _text(payload: Mapping[str, Any], key: str, default: str = "") -> str:
+    raw = payload.get(key, default)
+    if raw is None:
+        return default
+    if not isinstance(raw, str):
+        raise ValueError(f"{key} must be text")
+    return raw
+
+
+def _flag(payload: Mapping[str, Any], key: str) -> bool:
+    raw = payload.get(key)
+    if isinstance(raw, bool):
+        return raw
+    if raw in ("yes", "true", "on", "1"):
+        return True
+    if raw in ("no", "false", "off", "0", None, ""):
+        return False
+    raise ValueError(f"{key} must be yes or no")
+
+
+def _items(raw: Any) -> list[str]:
+    """A list, or a comma-separated string from a text box."""
+
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, str):
+        return [part.strip() for part in raw.split(",") if part.strip()]
+    if isinstance(raw, list) and len(raw) <= 100:
+        return [str(item) for item in raw]
+    raise ValueError("expected a list or comma-separated text")
+
+
+def _year_of(query: Mapping[str, list[str]]) -> int | None:
+    raw = (query.get("year") or [""])[0]
+    if not raw:
+        return datetime.now(UTC).year
+    return int(raw) if raw.isdigit() and 1900 <= int(raw) <= 2200 else None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Quant OS local dashboard")
     parser.add_argument("--state", type=Path, default=Path("state/trading.db"))
     parser.add_argument("--port", type=int, default=8780)
     parser.add_argument("--data", type=Path, default=Path("data/ohlc"), help="OHLC CSV folder")
+    parser.add_argument(
+        "--config", type=Path, default=None, help="paper config (fund financials, settings file)"
+    )
     args = parser.parse_args(argv)
     token = os.environ.get("QUANT_OS_DASHBOARD_TOKEN", "")
     if len(token) < 16:
@@ -305,7 +538,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     httpd = ThreadingHTTPServer(
-        ("127.0.0.1", args.port), make_handler(StateStore(args.state), token, args.data)
+        ("127.0.0.1", args.port),
+        make_handler(StateStore(args.state), token, args.data, config_path=args.config),
     )
     print(f"dashboard on http://127.0.0.1:{args.port}", file=sys.stderr)
     try:
