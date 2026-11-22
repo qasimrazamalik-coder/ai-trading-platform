@@ -41,7 +41,7 @@ class BrokerOrderRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_prices(self) -> "BrokerOrderRequest":
+    def validate_prices(self) -> BrokerOrderRequest:
         if self.order_type is OrderType.LIMIT and self.limit_price is None:
             raise ValueError("limit orders require limit_price")
         if self.order_type is OrderType.STOP and self.stop_price is None:

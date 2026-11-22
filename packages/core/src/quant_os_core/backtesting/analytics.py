@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -59,7 +60,7 @@ def summarize_backtest(
             cancelled_orders=result.cancelled_orders,
         )
 
-    def optional_metric(function):
+    def optional_metric(function: Callable[..., float]) -> float | None:
         try:
             return float(function(returns, periods_per_year=periods_per_year))
         except ValueError:

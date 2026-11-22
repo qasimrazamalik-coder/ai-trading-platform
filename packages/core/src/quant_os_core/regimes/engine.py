@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import numpy.typing as npt
 
 from quant_os_core.regimes.base import RegimeSnapshot
@@ -34,15 +33,14 @@ def regime_snapshot(
     risk = classify_risk(growth_asset_returns, defensive_asset_returns)
 
     liquidity = None
-    liquidity_inputs = (spread_bps, depth_zscore, volume_zscore)
-    if any(value is not None for value in liquidity_inputs):
-        if any(value is None for value in liquidity_inputs):
-            raise ValueError("liquidity inputs must be supplied together")
+    if spread_bps is not None and depth_zscore is not None and volume_zscore is not None:
         liquidity = classify_liquidity(
             spread_bps=float(spread_bps),
             depth_zscore=float(depth_zscore),
             volume_zscore=float(volume_zscore),
         )
+    elif any(value is not None for value in (spread_bps, depth_zscore, volume_zscore)):
+        raise ValueError("liquidity inputs must be supplied together")
 
     correlation = None
     if correlation_matrix is not None:

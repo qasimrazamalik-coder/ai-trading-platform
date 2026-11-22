@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
 from quant_os_core.agents.exits import Bar
 from quant_os_core.backtesting.models import OrderSide
 from quant_os_core.execution.broker import PaperBroker

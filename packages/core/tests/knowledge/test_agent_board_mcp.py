@@ -9,6 +9,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.agents.board import AgentBoard, AnalystRole, BoardAnalyst
 from quant_os_core.agents.board_worker import run_local_shift
 from quant_os_core.agents.council import Stance

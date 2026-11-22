@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
-from datetime import datetime, timezone
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -42,7 +42,7 @@ def _validate_timestamp_returns(
             raise TypeError("timestamps must contain datetime values")
         if timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("timestamps must be timezone-aware")
-        normalized.append(timestamp.astimezone(timezone.utc))
+        normalized.append(timestamp.astimezone(UTC))
     return tuple(normalized), values
 
 
@@ -51,7 +51,7 @@ def _bucket(
     returns: ArrayLike,
     *,
     bucket_count: int,
-    indexer,
+    indexer: Callable[[datetime], int],
     labels: Sequence[str],
     title: str,
 ) -> TimeBucketData:

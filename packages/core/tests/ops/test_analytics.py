@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from quant_os_core.ops import analytics
 from quant_os_core.ops.dashboard import make_handler, snapshot
 from quant_os_core.ops.state import StateStore

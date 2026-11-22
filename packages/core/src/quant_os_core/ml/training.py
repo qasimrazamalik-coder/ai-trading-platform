@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -42,7 +43,7 @@ def train_torch_regressor(
     if xtr.shape[0] != ytr.shape[0] or xva.shape[0] != yva.shape[0]:
         raise ValueError("feature and target row counts must match")
     torch.manual_seed(seed)
-    module = model
+    module: Any = model  # duck-typed torch.nn.Module; torch ships no usable stubs here
     parameters = getattr(module, "parameters", None)
     if parameters is None:
         raise TypeError("model must be a PyTorch module")

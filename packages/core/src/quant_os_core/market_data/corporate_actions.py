@@ -40,13 +40,14 @@ class CorporateAction(BaseModel):
         return ensure_aware(value, field="effective_at")
 
     @model_validator(mode="after")
-    def validate_payload(self) -> "CorporateAction":
-        if self.action_type is CorporateActionType.CASH_DIVIDEND:
-            if self.cash_amount is None or self.currency is None:
-                raise ValueError("cash dividend requires cash_amount and currency")
-        if self.action_type in {CorporateActionType.SPLIT, CorporateActionType.REVERSE_SPLIT}:
-            if self.ratio is None:
-                raise ValueError("split action requires ratio")
+    def validate_payload(self) -> CorporateAction:
+        if self.action_type is CorporateActionType.CASH_DIVIDEND and (
+            self.cash_amount is None or self.currency is None
+        ):
+            raise ValueError("cash dividend requires cash_amount and currency")
+        splits = {CorporateActionType.SPLIT, CorporateActionType.REVERSE_SPLIT}
+        if self.action_type in splits and self.ratio is None:
+            raise ValueError("split action requires ratio")
         if self.action_type is CorporateActionType.SYMBOL_CHANGE and not self.new_symbol:
             raise ValueError("symbol change requires new_symbol")
         return self

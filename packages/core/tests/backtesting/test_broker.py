@@ -4,7 +4,6 @@ from quant_os_core.backtesting.broker import BrokerConfig, SimulatedBroker
 from quant_os_core.backtesting.costs import ProportionalFeeModel
 from quant_os_core.backtesting.models import (
     OrderRequest,
-    OrderSide,
     OrderStatus,
     OrderType,
     TimeInForce,

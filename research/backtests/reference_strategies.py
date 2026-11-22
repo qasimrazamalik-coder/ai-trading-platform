@@ -29,6 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
+
 from quant_os_core.right_fit.multiple_testing import deflated_sharpe_ratio
 from quant_os_core.right_fit.pbo import probability_backtest_overfitting
 

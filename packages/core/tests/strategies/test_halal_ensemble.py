@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
 from quant_os_core.strategies.halal_ensemble import (
     PriceTable,
     buy_hold,

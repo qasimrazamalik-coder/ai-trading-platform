@@ -29,6 +29,7 @@ from edge_hunt import (
     lag,
     load_closes,
 )
+
 from quant_os_core.strategies.halal_ensemble import (
     TRADING_DAYS,
     PriceTable,

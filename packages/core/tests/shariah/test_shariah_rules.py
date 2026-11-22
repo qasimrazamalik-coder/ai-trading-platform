@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import pytest
+
 from quant_os_core.instruments import AssetClass, Instrument, InstrumentId, InstrumentType
 from quant_os_core.shariah import (
     CompanyFinancials,

@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.knowledge import KnowledgeBase, KnowledgeChatbot, chunk_markdown
 from quant_os_core.mcp_server import QuantOsMcp
 

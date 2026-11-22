@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+
 from quant_os_core.strategies.halal_ensemble import (
     EnsembleUniverse,
     PriceTable,

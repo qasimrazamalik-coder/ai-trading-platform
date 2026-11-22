@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import numpy as np
 import pytest
+
 from quant_os_core.strategies.diversified_core import (
     CoreMode,
     RebalanceOrder,

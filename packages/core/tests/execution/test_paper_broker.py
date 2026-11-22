@@ -7,7 +7,6 @@ from quant_os_core.backtesting.models import OrderSide, OrderStatus, OrderType
 from quant_os_core.execution import BrokerOrderRequest, PaperBroker
 from quant_os_core.instruments import InstrumentId
 
-
 BTC = InstrumentId(venue="PAPER", symbol="BTCUSDT")
 
 

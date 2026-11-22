@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from quant_os_core.backtesting import EventDrivenBacktester
-from quant_os_core.backtesting.models import OrderRequest, OrderSide
 from quant_os_core.backtesting.engine import StrategyContext
+from quant_os_core.backtesting.models import OrderRequest, OrderSide
 from quant_os_core.instruments import InstrumentId
 from quant_os_core.market_data.models import Candle
 

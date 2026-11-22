@@ -29,7 +29,7 @@ class SklearnRegressorAdapter:
     def predict(self, x: npt.ArrayLike) -> np.ndarray:
         features = np.asarray(x, dtype=np.float64)
         if self.name == "lightgbm" and hasattr(self.model, "booster_"):
-            raw = getattr(self.model, "booster_").predict(features)
+            raw = self.model.booster_.predict(features)
         else:
             raw = self.model.predict(features)
         values = np.asarray(raw, dtype=np.float64)
