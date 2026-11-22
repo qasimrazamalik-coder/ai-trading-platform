@@ -39,8 +39,13 @@ EXTRA_TRIAL_SHARPES = (0.14, 0.70, 0.72, 0.38, 0.54)
 def fetch(out: Path) -> None:
     import yfinance as yf  # optional, only needed for downloading
 
-    frame = yf.download(list(SYMBOLS), start=START, auto_adjust=True, progress=False)["Close"]
+    # threads=False: yfinance's threaded downloads race on its SQLite cache on Windows
+    frame = yf.download(
+        list(SYMBOLS), start=START, auto_adjust=True, progress=False, threads=False
+    )["Close"]
     frame = frame.dropna(how="any")  # common calendar where every asset has a price
+    if frame.empty:
+        raise SystemExit("download returned no complete rows; retry the fetch")
     out.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(out, index_label="date", date_format="%Y-%m-%d")
     print(f"wrote {len(frame)} rows x {len(frame.columns)} assets to {out}")

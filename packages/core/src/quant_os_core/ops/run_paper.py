@@ -33,9 +33,10 @@ from quant_os_core.instruments import AssetClass, Instrument, InstrumentId, Inst
 from quant_os_core.market_data.free_sources import AlpacaBars, AlpacaCryptoBars
 from quant_os_core.ops.alerts import AlertSink, MultiSink, NtfySink, StoreSink, WebhookSink
 from quant_os_core.ops.alpaca_paper import AlpacaPaperBroker
+from quant_os_core.ops.core_loop import CoreRebalancer
 from quant_os_core.ops.paper_loop import PaperTrader, UniverseItem
 from quant_os_core.ops.resilience import CircuitBreaker, retry
-from quant_os_core.ops.signals import DonchianBreakout, ForecastBreakout
+from quant_os_core.ops.signals import CoreTrendSignal, DonchianBreakout, ForecastBreakout
 from quant_os_core.ops.state import StateStore
 from quant_os_core.risk_engine import RiskEngine, default_protections
 from quant_os_core.shariah import (
@@ -45,6 +46,7 @@ from quant_os_core.shariah import (
     ShariahProfile,
     halal_risk_limits,
 )
+from quant_os_core.strategies.diversified_core import CoreMode
 
 
 def _universe(config: dict[str, Any]) -> dict[str, UniverseItem]:
@@ -90,6 +92,8 @@ def _signal(config: dict[str, Any]) -> Any:
     silently trading without its filter.
     """
 
+    if config.get("strategy") == "core":  # trade-plan mode of the diversified core
+        return CoreTrendSignal()
     primary = ForecastBreakout() if config.get("signal") == "forecast" else DonchianBreakout()
     model_cfg = config.get("model")
     if not model_cfg:
@@ -114,8 +118,40 @@ def _alerts(config: dict[str, Any], store: StateStore) -> AlertSink:
     return MultiSink(sinks)
 
 
-def build_trader(config: dict[str, Any]) -> tuple[PaperTrader, dict[str, Any]]:
+Trader = PaperTrader | CoreRebalancer
+
+
+def _core_rebalancer(config: dict[str, Any], store: StateStore) -> CoreRebalancer:
+    core = config.get("core") or {}
+    return CoreRebalancer(
+        broker=AlpacaPaperBroker(
+            os.environ.get("APCA_API_KEY_ID", ""), os.environ.get("APCA_API_SECRET_KEY", "")
+        ),
+        store=store,
+        universe=_universe(config),
+        shariah=ShariahGate(ShariahProfile.spot_crypto_and_day_trading()),
+        protections=default_protections(),
+        risk=RiskEngine(halal_risk_limits()),
+        alerts=_alerts(config, store),
+        mode=CoreMode(core.get("mode", "defensive")),
+        band=Decimal(str(core.get("band", "0.02"))),
+        min_notional=Decimal(str(core.get("min_notional", "1.00"))),
+    )
+
+
+def build_trader(config: dict[str, Any]) -> tuple[Trader, dict[str, Any]]:
+    """Breakout loop by default; ``"strategy": "core"`` runs the diversified core.
+
+    The core's ``"gate"`` is ``"cost_guard"`` (monthly rebalancing, see ``core_loop``) or
+    ``"trade_plan"`` (each fund as a trend plan through the full entry pipeline).
+    """
+
     store = StateStore(Path(config.get("state", "state/trading.db")))
+    core = config.get("core") or {}
+    if config.get("strategy") == "core" and core.get("gate", "cost_guard") == "cost_guard":
+        return _core_rebalancer(config, store), config
+    if core.get("gate", "cost_guard") not in ("cost_guard", "trade_plan"):
+        raise ValueError("core.gate must be 'cost_guard' or 'trade_plan'")
     board = AgentBoard(Path(config.get("board", "state/board.db")))
     dial = RiskDial(config.get("dial", "balanced"))
     day = bool(config.get("day_trading", False))
@@ -168,7 +204,7 @@ def load_csv_bars(path: Path) -> list[Bar]:
 
 
 def fetch_bars(
-    trader: PaperTrader,
+    trader: Trader,
     timeframe: str,
     lookback_days: int,
     breaker: CircuitBreaker,

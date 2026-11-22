@@ -109,3 +109,44 @@ class ForecastBreakout:
             confidence=self.confidence,
             justification=f"breakout; stop = {self.stop_sigmas} x {self.horizon}-bar EWMA vol",
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CoreTrendSignal:
+    """Diversified core in trade-plan mode: hold a fund while it is above its long average.
+
+    This routes the core through the full entry pipeline (plan, edge-over-cost, Shariah,
+    protections, governor, council, risk). The stop is volatility based (``atr_mult`` ATRs,
+    clamped to 1-15% of entry so ``validate_plan`` accepts it) and is a real exit: a fund
+    that falls that far is sold. Confidence is the pipeline's fixed prior, not a forecast,
+    so the edge check here measures volatility against cost, not predicted skill.
+    """
+
+    trend_window: int = 200
+    atr_mult: Decimal = Decimal("3")
+    reward_to_risk: Decimal = Decimal("2")
+    confidence: Decimal = Decimal("0.6")
+
+    def __call__(self, symbol: str, bars: Sequence[Bar]) -> TradePlan | None:
+        if len(bars) < self.trend_window + 2:
+            return None
+        last = bars[-1]
+        trend = sum((b.close for b in bars[-self.trend_window :]), Decimal("0")) / Decimal(
+            self.trend_window
+        )
+        if last.close <= trend:
+            return None
+        volatility = atr(bars)
+        if volatility is None or volatility <= 0:
+            return None
+        risk = volatility * self.atr_mult
+        risk = min(max(risk, last.close * Decimal("0.011")), last.close * Decimal("0.149"))
+        return TradePlan(
+            symbol=symbol,
+            entry_price=last.close,
+            profit_target=last.close + risk * self.reward_to_risk,
+            stop_loss=last.close - risk,
+            invalidation_condition=f"close back below the {self.trend_window}-bar average",
+            confidence=self.confidence,
+            justification=f"diversified core: fund above its {self.trend_window}-bar average",
+        )

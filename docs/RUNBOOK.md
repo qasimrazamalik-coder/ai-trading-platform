@@ -31,11 +31,29 @@ order) -> equity snapshot -> daily summary after the US close.
 
 Windows Task Scheduler or cron can run `--once` on a schedule instead of a forever loop.
 
+### 2b. Diversified core (monthly allocation)
+
+Use a **separate** Alpaca paper account (its own keys) and its own state file.
+
+- `examples/paper_core.json`: Shariah ETFs (SPUS, HLAL, UMMA, SPRE, SPSK, AAAU).
+- `examples/paper_core_original.json`: the 11 backtested ETFs (SPY, QQQ, GLD, sectors).
+
+Both need a `financials` block per ETF (fund-level, holdings-weighted ratios from the
+fund's factsheet or holdings file); without it the Shariah gate blocks the fund with R6.
+`core.mode` is `defensive` (cash for funds below their 200-day average; 2019-2026 worst
+drawdown -13.6%) or `growth` (inverse-volatility weights; -30.7%). `core.gate` is
+`cost_guard` (monthly rebalancing) or `trade_plan` (each fund as a trend plan through the
+full pipeline). See `GUARDRAILS.md`, "Diversified core".
+
+```bash
+python -m quant_os_core.ops.run_paper --config paper_core.json --once   # daily, after close
+```
+
 ## 3. Dashboard and kill switch
 
 ```bash
 export QUANT_OS_DASHBOARD_TOKEN=$(python -c "import secrets;print(secrets.token_urlsafe(24))")
-python -m quant_os_core.ops.dashboard --state state/trading.db     # http://127.0.0.1:8780
+python -m quant_os_core.ops.dashboard --state state/trading.db --data data/ohlc  # http://127.0.0.1:8780
 ```
 
 Shows equity, drawdown, win rate, open positions, why trades were blocked, recent decisions and

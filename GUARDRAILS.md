@@ -26,6 +26,23 @@ instruction can relax them. Changing one needs a code change, a test, a written 
 12. No pyramiding; daily trade cap.
 13. Unknown state (data gap, broker error, unreconciled position) means no new entries.
 
+### Diversified core (owner decision, 22 Nov 2026)
+
+The diversified core (`strategies/diversified_core.py`) is an allocation, not a trade idea:
+it has no stop or target. The owner approved two ways to run it, chosen by `core.gate`:
+
+- `cost_guard` (default, `ops/core_loop.py`): rules 9 and 12 and the edge-over-cost filter do
+  not apply; a cost guard replaces them (at most one rebalance per month, only when a fund is
+  more than 2 points off target or its target is zero, no order under $1). The Shariah gate
+  checks every order; protections and the risk engine check every buy; leverage stays 1.0;
+  kill switch, fail-closed broker breaker and position checks stay in force. It must run in
+  its own paper account: a position outside its universe pauses it.
+- `trade_plan` (`ops/signals.CoreTrendSignal`): every fund enters as a trend plan with a
+  volatility stop through the full entry pipeline, unchanged. Its confidence is the fixed
+  prior, so the edge check measures volatility against cost, not forecast skill.
+
+Every ETF still needs fund-level `financials` for the AAOIFI screen, or R6 blocks it.
+
 ## AI and automation
 
 14. Language models (local, Claude, ChatGPT) may explain, research, submit analyst reports and

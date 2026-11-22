@@ -1,0 +1,46 @@
+{
+  "_note": "Diversified core. Every ETF needs a 'financials' block (fund-level, holdings-weighted AAOIFI ratios) or the Shariah gate blocks it with R6. Run in its own Alpaca paper account. lookback_days must cover 200+ trading days.",
+  "strategy": "core",
+  "core": {
+    "mode": "defensive",
+    "gate": "cost_guard",
+    "band": 0.02,
+    "min_notional": 1.0
+  },
+  "state": "state/core.db",
+  "board": "state/board.db",
+  "dial": "balanced",
+  "timeframe": "1Day",
+  "interval_minutes": 1440,
+  "lookback_days": 320,
+  "alerts": {
+    "ntfy_topic": "replace-with-a-long-private-topic-name",
+    "webhook_url": null
+  },
+  "universe": [
+    {
+      "symbol": "SPUS",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "HLAL",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "UMMA",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "SPRE",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "SPSK",
+      "asset_class": "etf"
+    },
+    {
+      "symbol": "AAAU",
+      "asset_class": "etf"
+    }
+  ]
+}
