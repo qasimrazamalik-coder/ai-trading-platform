@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 
 from quant_os_core.backtesting.costs import FeeModel, ProportionalFeeModel
@@ -16,6 +17,7 @@ from quant_os_core.backtesting.models import (
     TimeInForce,
 )
 from quant_os_core.backtesting.slippage import BpsSlippageModel, SlippageModel
+from quant_os_core.instruments import InstrumentId
 from quant_os_core.market_data.models import Candle
 
 
@@ -63,7 +65,7 @@ class SimulatedBroker:
         return cancelled
 
 
-    def pending_signed_quantity(self, instrument_id) -> Decimal:
+    def pending_signed_quantity(self, instrument_id: InstrumentId) -> Decimal:
         """Return signed unfilled quantity for one instrument across open orders."""
         total = Decimal("0")
         for order in self.orders:
@@ -74,7 +76,9 @@ class SimulatedBroker:
             total += order.remaining_quantity * order.request.side.sign
         return total
 
-    def submit(self, request: OrderRequest, *, submitted_at, bar_index: int) -> SimulatedOrder:
+    def submit(
+        self, request: OrderRequest, *, submitted_at: datetime, bar_index: int
+    ) -> SimulatedOrder:
         order = SimulatedOrder(
             request=request,
             submitted_at=submitted_at,

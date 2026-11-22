@@ -43,18 +43,19 @@ def check_python_sources(files: list[Path]) -> list[str]:
             if len(line) > 100:
                 errors.append(f"line-length: {path.relative_to(ROOT)}:{number}:{len(line)}")
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                if node.func.id in DANGEROUS_BUILTINS:
-                    errors.append(
-                        f"dangerous-call: {path.relative_to(ROOT)}:{node.lineno}:{node.func.id}"
-                    )
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if (
-                    isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "os"
-                    and node.func.attr == "system"
-                ):
-                    errors.append(f"os.system: {path.relative_to(ROOT)}:{node.lineno}")
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name) and node.func.id in DANGEROUS_BUILTINS:
+                errors.append(
+                    f"dangerous-call: {path.relative_to(ROOT)}:{node.lineno}:{node.func.id}"
+                )
+            if (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "os"
+                and node.func.attr == "system"
+            ):
+                errors.append(f"os.system: {path.relative_to(ROOT)}:{node.lineno}")
     return errors
 
 

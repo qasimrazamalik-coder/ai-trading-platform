@@ -150,7 +150,7 @@ class YahooFundamentals:
     def _ticker(self, symbol: str) -> Any:
         with self._lock:
             if self.ticker_factory is None:
-                import yfinance  # type: ignore[import-untyped]
+                import yfinance
 
                 self.ticker_factory = yfinance.Ticker
             factory = self.ticker_factory

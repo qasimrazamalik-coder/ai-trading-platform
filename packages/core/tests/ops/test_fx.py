@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from quant_os_core.ops.fx import FxService, FxUnavailable, parse_payload
 
 T0 = datetime(2026, 11, 22, 12, tzinfo=UTC)

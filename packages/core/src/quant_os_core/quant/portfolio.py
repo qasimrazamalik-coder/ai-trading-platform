@@ -28,7 +28,7 @@ def correlation_matrix(returns: ArrayLike) -> Matrix:
     stds = np.std(matrix, axis=0, ddof=1)
     if np.any(stds == 0.0):
         raise ValueError("correlation is undefined for constant asset series")
-    return np.corrcoef(matrix, rowvar=False)
+    return np.asarray(np.corrcoef(matrix, rowvar=False), dtype=np.float64)
 
 
 def _validated_weights_covariance(

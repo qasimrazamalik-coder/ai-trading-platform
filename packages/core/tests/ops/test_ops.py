@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.agents.board import AgentBoard, AnalystRole, BoardAnalyst
 from quant_os_core.agents.council import AnalystCouncil, RuleAnalyst, Stance
 from quant_os_core.agents.day_trading import Market, flatten_time, session_close, settlement_time

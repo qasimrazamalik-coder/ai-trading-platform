@@ -30,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
+
 from quant_os_core.right_fit.multiple_testing import deflated_sharpe_ratio
 from quant_os_core.right_fit.pbo import probability_backtest_overfitting
 from quant_os_core.strategies.halal_ensemble import (

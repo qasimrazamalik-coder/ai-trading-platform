@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.agents import signals as signals_module
 from quant_os_core.agents.board import AgentBoard
 from quant_os_core.agents.exits import Bar

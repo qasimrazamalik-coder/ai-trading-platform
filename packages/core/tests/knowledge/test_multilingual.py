@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.knowledge import rag
 from quant_os_core.knowledge.rag import (
     answer_multilingual,

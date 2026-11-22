@@ -110,6 +110,7 @@ def test_analytics_capabilities() -> None:
 
 def test_execution_capabilities() -> None:
     from fastapi.testclient import TestClient
+
     from quant_os_api.main import app
 
     client = TestClient(app)
@@ -122,6 +123,7 @@ def test_execution_capabilities() -> None:
 
 def test_intelligence_capabilities() -> None:
     from fastapi.testclient import TestClient
+
     from quant_os_api.main import app
 
     client = TestClient(app)
@@ -133,6 +135,7 @@ def test_intelligence_capabilities() -> None:
 
 def test_terminal_demo_is_explicitly_synthetic_and_live_off() -> None:
     from fastapi.testclient import TestClient
+
     from quant_os_api.main import app
 
     client = TestClient(app)
@@ -148,6 +151,7 @@ def test_terminal_demo_is_explicitly_synthetic_and_live_off() -> None:
 
 def test_demo_market_websocket_stream() -> None:
     from fastapi.testclient import TestClient
+
     from quant_os_api.main import app
 
     client = TestClient(app)

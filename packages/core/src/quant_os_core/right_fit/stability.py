@@ -62,7 +62,8 @@ def parameter_surface_stability(
         raise ValueError("target_plateau_fraction must be in (0, 1]")
 
     best_flat = int(np.argmax(values))
-    best_index = tuple(int(index) for index in np.unravel_index(best_flat, values.shape))
+    best_row, best_col = np.unravel_index(best_flat, values.shape)
+    best_index = (int(best_row), int(best_col))
     best_value = float(values[best_index])
     scale = max(float(np.ptp(values)), abs(best_value), np.finfo(np.float64).eps)
     threshold = best_value - tolerance * max(abs(best_value), np.finfo(np.float64).eps)

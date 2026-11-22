@@ -7,7 +7,7 @@ import pytest
 
 from quant_os_core.backtesting.analytics import equity_returns, summarize_backtest
 from quant_os_core.backtesting.benchmark import compare_to_benchmark
-from quant_os_core.backtesting.broker import BrokerConfig, SimulatedBroker
+from quant_os_core.backtesting.broker import BrokerConfig
 from quant_os_core.backtesting.costs import FinancingModel, ProportionalFeeModel
 from quant_os_core.backtesting.engine import EventDrivenBacktester
 from quant_os_core.backtesting.models import (
@@ -16,14 +16,11 @@ from quant_os_core.backtesting.models import (
     Fill,
     OrderRequest,
     OrderSide,
-    OrderStatus,
-    OrderType,
     SimulatedOrder,
 )
 from quant_os_core.backtesting.portfolio import Portfolio, Position
 from quant_os_core.backtesting.slippage import BpsSlippageModel
 from quant_os_core.backtesting.vectorized import run_vectorized_backtest
-from quant_os_core.instruments import InstrumentId
 
 
 def point(equity: str) -> EquityPoint:

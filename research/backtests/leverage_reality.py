@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+
 from quant_os_core.right_fit.multiple_testing import deflated_sharpe_ratio
 
 DAYS = 365  # crypto trades every day

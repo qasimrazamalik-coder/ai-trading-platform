@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -50,7 +51,7 @@ def compare_to_benchmark(
     benchmark = benchmark_values[1:] / benchmark_values[:-1] - 1.0
     benchmark_total = float(benchmark_values[-1] / benchmark_values[0] - 1.0)
 
-    def optional(function):
+    def optional(function: Callable[..., float]) -> float | None:
         try:
             return float(function(strategy, benchmark, periods_per_year=periods_per_year))
         except TypeError:

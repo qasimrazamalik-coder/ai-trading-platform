@@ -46,7 +46,7 @@ def liquidity_score(
     if np.any(spread < 0.0) or np.any(depth <= 0.0):
         raise ValueError("spread must be non-negative and depth strictly positive")
     relative_depth = depth / np.median(depth)
-    return relative_depth / (1.0 + spread)
+    return np.asarray(relative_depth / (1.0 + spread), dtype=np.float64)
 
 
 def annualized_funding_rate(periodic_rates: ArrayLike, *, periods_per_year: float) -> np.ndarray:

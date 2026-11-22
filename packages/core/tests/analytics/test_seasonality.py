@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -9,11 +9,10 @@ from quant_os_core.analytics.seasonality import (
     returns_by_weekday,
 )
 
-
 TIMES = [
-    datetime(2026, 1, 5, 9, tzinfo=timezone.utc),
-    datetime(2026, 1, 5, 9, 30, tzinfo=timezone.utc),
-    datetime(2026, 2, 3, 15, tzinfo=timezone.utc),
+    datetime(2026, 1, 5, 9, tzinfo=UTC),
+    datetime(2026, 1, 5, 9, 30, tzinfo=UTC),
+    datetime(2026, 2, 3, 15, tzinfo=UTC),
 ]
 
 

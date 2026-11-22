@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import numpy as np
 import pytest
+
 from quant_os_core.agents import (
     AnalystCouncil,
     EntryPipeline,

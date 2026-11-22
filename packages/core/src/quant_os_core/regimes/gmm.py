@@ -80,7 +80,7 @@ class DiagonalGaussianMixture:
         converged = False
         current = -np.inf
         iterations = 0
-        for iterations in range(1, self.max_iter + 1):
+        for iterations in range(1, self.max_iter + 1):  # noqa: B007 - read after the loop
             log_joint = self._log_prob(x, means, variances) + np.log(weights)[None, :]
             log_norm = logsumexp(log_joint, axis=1)
             current = float(np.sum(log_norm))
@@ -113,7 +113,9 @@ class DiagonalGaussianMixture:
         x = self._matrix(features)
         fit = self.fit_
         log_joint = self._log_prob(x, fit.means, fit.variances) + np.log(fit.weights)[None, :]
-        return np.exp(log_joint - logsumexp(log_joint, axis=1)[:, None])
+        return np.asarray(
+            np.exp(log_joint - logsumexp(log_joint, axis=1)[:, None]), dtype=np.float64
+        )
 
     def predict(self, features: npt.ArrayLike) -> np.ndarray:
         return np.argmax(self.predict_proba(features), axis=1).astype(np.int64)

@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.agents.board import AgentBoard
 from quant_os_core.agents.market_note import (
     DISCLAIMER,

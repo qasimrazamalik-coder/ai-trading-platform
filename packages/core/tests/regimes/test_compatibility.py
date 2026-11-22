@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 
 from quant_os_core.regimes import (

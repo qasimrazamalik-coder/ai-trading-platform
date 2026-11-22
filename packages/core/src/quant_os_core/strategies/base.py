@@ -35,9 +35,12 @@ class ParameterDefinition:
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("parameter name cannot be blank")
-        if self.minimum is not None and self.maximum is not None:
-            if self.minimum > self.maximum:
-                raise ValueError("parameter minimum cannot exceed maximum")
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.minimum > self.maximum
+        ):
+            raise ValueError("parameter minimum cannot exceed maximum")
         if self.minimum is not None and self.default < self.minimum:
             raise ValueError("default cannot be below minimum")
         if self.maximum is not None and self.default > self.maximum:

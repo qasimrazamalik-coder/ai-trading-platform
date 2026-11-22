@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from quant_os_core.agents.board import AgentBoard
 from quant_os_core.agents.exits import OpenPosition
 from quant_os_core.agents.signals import Signal, SignalKind

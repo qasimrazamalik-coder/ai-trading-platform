@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
+from datetime import datetime
 from decimal import Decimal
 
 from quant_os_core.market_data.models import Candle
@@ -34,7 +35,7 @@ def aggregate_candles(candles: list[Candle], target_timeframe: str) -> list[Cand
             raise ValueError("cannot aggregate mixed source timeframes")
 
     ordered = sorted(candles, key=lambda item: item.timestamp)
-    buckets: dict[object, list[Candle]] = defaultdict(list)
+    buckets: dict[datetime, list[Candle]] = defaultdict(list)
     for candle in ordered:
         buckets[target.bucket_start(candle.timestamp)].append(candle)
 

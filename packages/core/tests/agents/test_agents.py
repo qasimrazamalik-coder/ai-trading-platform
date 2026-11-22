@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
+
 from quant_os_core.agents import (
     AnalystCouncil,
     EntryPipeline,

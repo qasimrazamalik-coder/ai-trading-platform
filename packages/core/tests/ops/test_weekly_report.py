@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.ops.core_loop import TARGETS_KEY, WEIGHTS_KEY
 from quant_os_core.ops.report import build_report, main, screening_warnings, send_report
 from quant_os_core.ops.state import StateStore

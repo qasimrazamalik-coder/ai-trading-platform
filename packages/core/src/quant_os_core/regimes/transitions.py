@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import numpy as np
 import numpy.typing as npt
 
@@ -25,7 +27,7 @@ def transition_matrix(
         raise ValueError("smoothing must be finite and non-negative")
 
     counts = np.full((total_states, total_states), smoothing, dtype=np.float64)
-    for current, nxt in zip(values[:-1], values[1:], strict=True):
+    for current, nxt in pairwise(values):
         counts[int(current), int(nxt)] += 1.0
     row_sums = counts.sum(axis=1, keepdims=True)
     zero_rows = row_sums[:, 0] <= 0.0

@@ -1,6 +1,7 @@
 from decimal import Decimal as D
 
 import pytest
+
 from quant_os_core.ops import calculators as c
 
 

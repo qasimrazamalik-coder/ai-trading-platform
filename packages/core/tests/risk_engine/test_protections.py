@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+
 from quant_os_core.risk_engine import (
     ClosedTrade,
     CooldownPeriod,
