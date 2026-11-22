@@ -24,15 +24,16 @@
       "financials": {
         "sector": "diversified_fund",
         "market_cap": "3126103507",
-        "interest_bearing_debt": "219704290",
-        "interest_bearing_cash_and_securities": "74112695",
-        "total_revenue": "516039909",
-        "noncompliant_revenue": "9847385",
-        "total_assets": "782321707",
-        "tangible_assets": "582503776",
+        "interest_bearing_debt": "219943298",
+        "interest_bearing_cash_and_securities": "74355489",
+        "total_revenue": "515978571",
+        "noncompliant_revenue": "1266676",
+        "total_assets": "781430365",
+        "tangible_assets": "581773410",
         "shares_outstanding": "1"
       },
-      "financials_source": "SEC N-PORT 2026-08-31, look-through"
+      "financials_source": "SEC N-PORT 2026-08-31, look-through",
+      "financials_screened_at": "2026-11-22"
     },
     {
       "symbol": "HLAL",
@@ -40,19 +41,33 @@
       "financials": {
         "sector": "diversified_fund",
         "market_cap": "941501285",
-        "interest_bearing_debt": "64225287",
-        "interest_bearing_cash_and_securities": "25608295",
-        "total_revenue": "161706608",
-        "noncompliant_revenue": "2136040",
-        "total_assets": "261852350",
-        "tangible_assets": "200734681",
+        "interest_bearing_debt": "63801157",
+        "interest_bearing_cash_and_securities": "25733468",
+        "total_revenue": "162243402",
+        "noncompliant_revenue": "459740",
+        "total_assets": "262152143",
+        "tangible_assets": "201107414",
         "shares_outstanding": "1"
       },
-      "financials_source": "SEC N-PORT 2026-08-31, look-through"
+      "financials_source": "SEC N-PORT 2026-08-31, look-through",
+      "financials_screened_at": "2026-11-22"
     },
     {
       "symbol": "UMMA",
-      "asset_class": "etf"
+      "asset_class": "etf",
+      "financials": {
+        "sector": "diversified_fund",
+        "market_cap": "288752345",
+        "interest_bearing_debt": "26834446",
+        "interest_bearing_cash_and_securities": "18901533",
+        "total_revenue": "87260979",
+        "noncompliant_revenue": "577738",
+        "total_assets": "137297377",
+        "tangible_assets": "105755205",
+        "shares_outstanding": "1"
+      },
+      "financials_source": "SEC N-PORT 2026-08-31, look-through",
+      "financials_screened_at": "2026-11-22"
     },
     {
       "symbol": "SPRE",
@@ -68,7 +83,8 @@
         "tangible_assets": "144738664",
         "shares_outstanding": "1"
       },
-      "financials_source": "SEC N-PORT 2026-08-31, look-through"
+      "financials_source": "SEC N-PORT 2026-08-31, look-through",
+      "financials_screened_at": "2026-11-22"
     },
     {
       "symbol": "SPSK",
