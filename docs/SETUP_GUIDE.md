@@ -52,9 +52,20 @@ Each script prints a table and a PASS or FAIL gate:
 
 1. Copy `examples\paper_core.json` (Shariah ETFs) to `paper_core.json`, or
    `examples\paper_core_original.json` for the 11 backtested ETFs.
-2. Add a `financials` block to every fund: holdings-weighted ratios from the fund's factsheet
-   or holdings file (debt, interest-bearing cash, non-compliant revenue, market cap...).
-   Without it the Shariah check blocks the fund with rule R6. Do not invent numbers.
+2. Fill each fund's `financials` from SEC filings (look-through of its latest N-PORT
+   holdings and every holding's EDGAR facts). SEC needs a contact email in the User-Agent:
+
+   ```powershell
+   .venv\Scripts\python -m quant_os_core.shariah.fund_screen SPUS HLAL UMMA SPRE SPSK AAAU `
+       --user-agent "Your Name you@example.com" --config paper_core.json --write
+   ```
+
+   It prints each fund's ratios and PASS/FAIL, and writes only funds it could screen (at
+   least 90% of equity value resolved). Holdings that do not file with the SEC (foreign
+   companies) are looked up on Yahoo Finance by ISIN; the run lists them for review
+   (`--no-yahoo` for SEC data only). Sukuk funds and physical-gold trusts cannot be
+   screened this way and stay blocked. Review the printed ratios before trading; re-run
+   after each new quarterly filing.
 3. Pick `core.mode`: `defensive` (holds cash for funds below their 200-day average; smaller
    drops) or `growth` (fully invested; higher return, bigger drops).
 4. Optional phone alerts: install the ntfy app, subscribe to a long private topic name and put it

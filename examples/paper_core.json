@@ -20,11 +20,35 @@
   "universe": [
     {
       "symbol": "SPUS",
-      "asset_class": "etf"
+      "asset_class": "etf",
+      "financials": {
+        "sector": "diversified_fund",
+        "market_cap": "3126103507",
+        "interest_bearing_debt": "219704290",
+        "interest_bearing_cash_and_securities": "74112695",
+        "total_revenue": "516039909",
+        "noncompliant_revenue": "9847385",
+        "total_assets": "782321707",
+        "tangible_assets": "582503776",
+        "shares_outstanding": "1"
+      },
+      "financials_source": "SEC N-PORT 2026-08-31, look-through"
     },
     {
       "symbol": "HLAL",
-      "asset_class": "etf"
+      "asset_class": "etf",
+      "financials": {
+        "sector": "diversified_fund",
+        "market_cap": "941501285",
+        "interest_bearing_debt": "64225287",
+        "interest_bearing_cash_and_securities": "25608295",
+        "total_revenue": "161706608",
+        "noncompliant_revenue": "2136040",
+        "total_assets": "261852350",
+        "tangible_assets": "200734681",
+        "shares_outstanding": "1"
+      },
+      "financials_source": "SEC N-PORT 2026-08-31, look-through"
     },
     {
       "symbol": "UMMA",
@@ -32,7 +56,19 @@
     },
     {
       "symbol": "SPRE",
-      "asset_class": "etf"
+      "asset_class": "etf",
+      "financials": {
+        "sector": "diversified_fund",
+        "market_cap": "211395063",
+        "interest_bearing_debt": "39725530",
+        "interest_bearing_cash_and_securities": "7259623",
+        "total_revenue": "21291926",
+        "noncompliant_revenue": "291503",
+        "total_assets": "147029148",
+        "tangible_assets": "144738664",
+        "shares_outstanding": "1"
+      },
+      "financials_source": "SEC N-PORT 2026-08-31, look-through"
     },
     {
       "symbol": "SPSK",

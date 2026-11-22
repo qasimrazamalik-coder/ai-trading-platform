@@ -38,8 +38,9 @@ Use a **separate** Alpaca paper account (its own keys) and its own state file.
 - `examples/paper_core.json`: Shariah ETFs (SPUS, HLAL, UMMA, SPRE, SPSK, AAAU).
 - `examples/paper_core_original.json`: the 11 backtested ETFs (SPY, QQQ, GLD, sectors).
 
-Both need a `financials` block per ETF (fund-level, holdings-weighted ratios from the
-fund's factsheet or holdings file); without it the Shariah gate blocks the fund with R6.
+Both need a `financials` block per ETF; without it the Shariah gate blocks the fund with R6.
+Fill them from SEC filings with `python -m quant_os_core.shariah.fund_screen <tickers>
+--user-agent "Name email" --config <file> --write` (look-through of N-PORT holdings).
 `core.mode` is `defensive` (cash for funds below their 200-day average; 2019-2026 worst
 drawdown -13.6%) or `growth` (inverse-volatility weights; -30.7%). `core.gate` is
 `cost_guard` (monthly rebalancing) or `trade_plan` (each fund as a trend plan through the
