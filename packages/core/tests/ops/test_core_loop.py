@@ -237,3 +237,129 @@ def test_core_does_not_trade_again_after_an_ambiguous_submit(tmp_path: Path) -> 
     third = core.step(T0 + timedelta(minutes=10), bars)
     after = {p.instrument_id.symbol: p.quantity for p in broker.account().positions}
     assert after == held and third.entries_submitted == []  # inside the band: no duplicates
+
+
+class _NotionalBroker(PaperBroker):
+    """Paper broker that advertises dollar (notional) orders and records every request."""
+
+    supports_notional = True
+
+    def __init__(self, cash: str = "10000") -> None:
+        super().__init__(
+            initial_cash=Decimal(cash), fee_rate=Decimal("0"), slippage_bps=Decimal("0")
+        )
+        self.requests: list[BrokerOrderRequest] = []
+
+    def submit(self, request: BrokerOrderRequest):  # type: ignore[no-untyped-def]
+        self.requests.append(request)
+        return super().submit(request)
+
+
+class _AlertRecorder:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+
+    def send(self, level: str, title: str, message: str) -> None:
+        self.sent.append((level, title, message))
+
+
+def test_core_sends_buys_as_dollar_amounts_and_sells_as_quantities(tmp_path: Path) -> None:
+    broker = _NotionalBroker()
+    bars = {s: _series(i) for i, s in enumerate(SYMBOLS)}
+    _setup(broker, bars)
+    core = _rebalancer(tmp_path, broker)
+    core.step(T0, bars)
+    buys = [r for r in broker.requests if r.side is OrderSide.BUY]
+    assert len(buys) == len(SYMBOLS)
+    for request in buys:
+        price = bars[request.instrument_id.symbol][-1].close
+        assert request.notional is not None and request.notional >= Decimal("1")
+        assert request.notional == (request.quantity * price).quantize(
+            Decimal("0.01"), "ROUND_DOWN"
+        )
+    # next month AAA crashes below its 200-day average: the exit is a share quantity
+    core.mode = CoreMode.DEFENSIVE
+    crash = list(bars["AAA"])
+    for k in range(1, 31):
+        p = crash[-1].close * Decimal("0.99")
+        crash.append(Bar(T0 + timedelta(days=k), p * Decimal("1.005"), p * Decimal("0.995"), p))
+    bars2 = {s: (crash if s == "AAA" else bars[s]) for s in SYMBOLS}
+    _setup(broker, bars2)
+    recorder = _AlertRecorder()
+    core.alerts = recorder
+    assert "AAA" in core.step(T0 + timedelta(days=31), bars2).exits
+    sells = [r for r in broker.requests if r.side is OrderSide.SELL]
+    assert sells and all(r.notional is None and r.quantity > 0 for r in sells)
+    core.step(T0 + timedelta(days=32), bars2)  # sale proceeds are not a deposit
+    assert not any(title == "deposit detected" for _, title, _ in recorder.sent)
+
+
+class _UnsettledBroker(PaperBroker):
+    """Reports only part of its cash as settled (e.g. unsettled sale proceeds)."""
+
+    settled = Decimal("3000")
+
+    def account(self):  # type: ignore[no-untyped-def]
+        from dataclasses import replace
+
+        snapshot = super().account()
+        return replace(snapshot, buying_power=min(snapshot.buying_power, self.settled))
+
+
+def test_core_buys_only_with_settled_cash(tmp_path: Path) -> None:
+    broker = _UnsettledBroker(
+        initial_cash=Decimal("10000"), fee_rate=Decimal("0"), slippage_bps=Decimal("0")
+    )
+    bars = {s: _series(i) for i, s in enumerate(SYMBOLS)}
+    _setup(broker, bars)
+    core = _rebalancer(tmp_path, broker)
+    report = core.step(T0, bars)
+    spent = Decimal("10000") - broker.account().cash
+    assert Decimal(0) < spent <= Decimal("2970")  # settled cash less the 1% buffer
+    assert sorted(report.entries_submitted) == sorted(SYMBOLS)  # scaled down, not skipped
+    import json
+
+    for decision in core.store.recent("decisions", 50):
+        stages = {s["stage"]: s["passed"] for s in json.loads(decision["stages"])}
+        assert stages["settled_cash"] is True
+
+
+def test_core_alerts_on_a_deposit_and_invests_it_at_the_monthly_rebalance(tmp_path: Path) -> None:
+    broker = _broker()
+    bars = {s: _series(i) for i, s in enumerate(SYMBOLS)}
+    _setup(broker, bars)
+    core = _rebalancer(tmp_path, broker)
+    recorder = _AlertRecorder()
+    core.alerts = recorder
+    core.step(T0, bars)
+    broker._cash += Decimal("5000")  # the owner deposits new cash
+    mid_month = core.step(T0 + timedelta(days=5), bars)
+    deposits = [m for _, title, m in recorder.sent if title == "deposit detected"]
+    assert len(deposits) == 1 and "$5000.00" in deposits[0] and "monthly" in deposits[0]
+    assert mid_month.entries_submitted == []  # flag off: waits for the monthly rebalance
+    core.step(T0 + timedelta(days=6), bars)
+    assert len([t for _, t, _ in recorder.sent if t == "deposit detected"]) == 1  # once
+    next_month = core.step(T0 + timedelta(days=31), bars)
+    assert next_month.entries_submitted  # the deposit is invested on schedule
+
+
+def test_core_invests_a_deposit_immediately_when_enabled(tmp_path: Path) -> None:
+    broker = _broker()
+    bars = {s: _series(i) for i, s in enumerate(SYMBOLS)}
+    _setup(broker, bars)
+    core = _rebalancer(tmp_path, broker)
+    core.invest_new_cash_immediately = True
+    core.step(T0, bars)
+    month_marker = core.store.get_value("core:last_rebalance")
+    broker._cash += Decimal("5000")
+    report = core.step(T0 + timedelta(days=5), bars)
+    assert report.entries_submitted and report.exits == []  # buys only, no sells
+    assert broker.account().cash >= 0 and broker.account().cash < Decimal("1000")
+    assert core.store.get_value("core:last_rebalance") == month_marker  # schedule untouched
+    assert core.store.get_value("core:deposit_pending") == ""
+    again = core.step(T0 + timedelta(days=6), bars)
+    assert again.entries_submitted == []  # one deposit, one off-schedule rebalance
+    # a small deposit that leaves idle cash inside the band does not trade
+    broker._cash += Decimal("100")
+    small = core.step(T0 + timedelta(days=7), bars)
+    assert small.entries_submitted == []

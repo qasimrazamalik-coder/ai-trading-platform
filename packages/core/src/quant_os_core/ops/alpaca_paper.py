@@ -6,7 +6,13 @@ Endpoints (Trading API v2, https://docs.alpaca.markets/reference/postorder):
 
 Only the paper host is accepted; live trading stays behind the platform's two-key interlock.
 Stocks use ``day`` orders because Alpaca allows fractional quantities only for market and day
-orders; crypto uses ``gtc``.
+orders; crypto uses ``gtc``. A market order whose request carries ``notional`` is sent as a
+dollar amount (Alpaca fractional "notional" orders) instead of a share quantity.
+
+Buying power is the most conservative cash figure Alpaca reports: the smaller of ``cash`` and
+``non_marginable_buying_power``. Alpaca's ``buying_power`` includes margin and is never used.
+Paper accounts do not model T+1 settlement exactly, so the core loop also waits one step after
+a sell before it buys with the proceeds.
 """
 
 from __future__ import annotations
@@ -69,8 +75,18 @@ def _dec(value: Any) -> Decimal:
     return Decimal(str(value)) if value not in (None, "") else Decimal("0")
 
 
+def settled_cash(raw: Mapping[str, Any]) -> Decimal:
+    """Cash that can fund a buy without margin: min of the cash figures Alpaca reports."""
+
+    figures = [_dec(raw.get("cash"))]
+    if raw.get("non_marginable_buying_power") not in (None, ""):
+        figures.append(_dec(raw.get("non_marginable_buying_power")))
+    return min(figures)
+
+
 class AlpacaPaperBroker:
     venue = "ALPACA"
+    supports_notional = True  # fractional market orders by dollar amount
 
     def __init__(
         self, key_id: str, secret_key: str, *, http: Http = urllib_http, base_url: str = PAPER_URL
@@ -130,12 +146,15 @@ class AlpacaPaperBroker:
         symbol = request.instrument_id.symbol
         payload: dict[str, Any] = {
             "symbol": symbol,
-            "qty": str(request.quantity),
             "side": request.side.value,
             "type": request.order_type.value,
             "time_in_force": "gtc" if "/" in symbol else "day",
             "client_order_id": request.client_order_id,
         }
+        if request.notional is not None and request.order_type is OrderType.MARKET:
+            payload["notional"] = str(request.notional)
+        else:
+            payload["qty"] = str(request.quantity)
         if request.order_type is OrderType.LIMIT:
             payload["limit_price"] = str(request.limit_price)
         if request.order_type is OrderType.STOP:
@@ -169,7 +188,7 @@ class AlpacaPaperBroker:
             cash=_dec(raw.get("cash")),
             equity=_dec(raw.get("equity")),
             # Halal mode never uses margin: buying power is settled cash, not Alpaca's figure.
-            buying_power=_dec(raw.get("cash")),
+            buying_power=settled_cash(raw),
             positions=tuple(
                 BrokerPosition(
                     InstrumentId(venue=self.venue, symbol=_symbol(p)),

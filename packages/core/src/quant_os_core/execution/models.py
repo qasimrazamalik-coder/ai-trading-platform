@@ -32,8 +32,12 @@ class BrokerOrderRequest(BaseModel):
     time_in_force: TimeInForce = TimeInForce.GTC
     limit_price: Decimal | None = Field(default=None, gt=0)
     stop_price: Decimal | None = Field(default=None, gt=0)
+    # Optional dollar amount for a market order at a venue that supports fractional
+    # "notional" orders (Alpaca). ``quantity`` stays the estimate used by risk checks and by
+    # venues that ignore this field.
+    notional: Decimal | None = Field(default=None, gt=0)
 
-    @field_validator("quantity", "limit_price", "stop_price", mode="before")
+    @field_validator("quantity", "limit_price", "stop_price", "notional", mode="before")
     @classmethod
     def reject_float(cls, value: object) -> object:
         if isinstance(value, float):
@@ -41,7 +45,7 @@ class BrokerOrderRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_prices(self) -> "BrokerOrderRequest":
+    def validate_prices(self) -> BrokerOrderRequest:
         if self.order_type is OrderType.LIMIT and self.limit_price is None:
             raise ValueError("limit orders require limit_price")
         if self.order_type is OrderType.STOP and self.stop_price is None:
@@ -50,6 +54,8 @@ class BrokerOrderRequest(BaseModel):
             raise ValueError("limit_price is only valid for limit orders")
         if self.order_type is not OrderType.STOP and self.stop_price is not None:
             raise ValueError("stop_price is only valid for stop orders")
+        if self.notional is not None and self.order_type is not OrderType.MARKET:
+            raise ValueError("notional is only valid for market orders")
         return self
 
 

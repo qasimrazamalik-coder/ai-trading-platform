@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import urllib.request
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 Generate = Callable[[Sequence[dict[str, str]]], str]
 Embed = Callable[[Sequence[str]], list[list[float]]]
@@ -330,3 +332,284 @@ def ollama_generate(
         return str(payload.get("message", {}).get("content", ""))
 
     return call
+
+
+# ---- multilingual front end (English, Urdu, Arabic) -------------------------------------
+
+LANGUAGES = ("en", "ur", "ar")
+_ARABIC_SCRIPT = re.compile(r"[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff\ufe70-\ufeff]")
+# Letters used in Urdu but not Arabic (tteh, ddal, rreh, noon ghunna, do-chashmi heh,
+# heh goal, yeh barree, keheh, gaf, Farsi yeh, peh, tcheh, jeh) and the reverse (teh
+# marbuta, Arabic yeh, alef maksura, Arabic kaf, Arabic heh, harakat).
+_URDU_ONLY = re.compile(
+    r"[\u0679\u0688\u0691\u06ba\u06be\u06c1\u06c3\u06d2\u06d3\u06a9\u06af\u06cc\u067e\u0686\u0698]"
+)
+_ARABIC_ONLY = re.compile(r"[\u0629\u064a\u0649\u0643\u0647\u064b-\u0652]")
+_LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z0-9\-]+")
+# "Should I buy / sell" in Urdu and Arabic: refused like the English pattern.
+_SIGNAL_REQUEST_UR_AR = re.compile(
+    "|".join(
+        [
+            "خریدوں",
+            "بیچوں",
+            "خرید لوں",
+            "بیچ دوں",
+            "هل أشتري",
+            "هل أبيع",
+            "أشتري الآن",
+            "أبيع الآن",
+            "هل يجب أن أشتري",
+            "هل يجب أن أبيع",
+        ]
+    )
+)
+
+# Small bilingual glossary so retrieval still works without a model. Keys are matched as
+# substrings, longest first (Arabic attaches the article and some prepositions to the word).
+GLOSSARY: dict[str, str] = {
+    # Urdu
+    "حلال": "halal",
+    "حرام": "haram",
+    "سود": "riba interest",
+    "زکوٰۃ": "zakat",
+    "زکوۃ": "zakat",
+    "زکات": "zakat",
+    "زکاۃ": "zakat",
+    "شیئر": "stock share",
+    "حصص": "stock shares",
+    "اسٹاک": "stock",
+    "رسک": "risk",
+    "خطرہ": "risk",
+    "خطرے": "risk",
+    "ڈرا ڈاؤن": "drawdown",
+    "ڈراڈاؤن": "drawdown",
+    "منافع": "profit",
+    "نقصان": "loss",
+    "سونا": "gold",
+    "سونے": "gold",
+    "کرپٹو": "crypto",
+    "بٹ کوائن": "bitcoin crypto",
+    "صکوک": "sukuk",
+    "شریعت": "shariah",
+    "شرعی": "shariah",
+    "فیوچرز": "futures",
+    "آپشنز": "options",
+    "لیوریج": "leverage",
+    "مارجن": "margin",
+    "شارٹ": "short selling",
+    "ٹریڈنگ": "trading",
+    "پوزیشن": "position size",
+    "اسٹاپ": "stop loss",
+    "تطہیر": "purification",
+    "فتویٰ": "fatwa",
+    "فتوی": "fatwa",
+    "جوا": "gambling",
+    "غرر": "gharar uncertainty",
+    "فنڈ": "fund etf",
+    "قرض": "debt",
+    "مہنگائی": "inflation",
+    "تنوع": "diversification diversified",
+    "قیمت": "price",
+    "مارکیٹ": "market",
+    "بیک ٹیسٹ": "backtest",
+    "حکمت عملی": "strategy",
+    "نفسیات": "psychology",
+    "لالچ": "greed",
+    "ملین": "million",
+    # Arabic
+    "ربا": "riba interest",
+    "زكاة": "zakat",
+    "فائدة": "interest riba",
+    "فوائد": "interest riba",
+    "أسهم": "stock shares",
+    "اسهم": "stock shares",
+    "سهم": "stock share",
+    "مخاطر": "risk",
+    "تراجع": "drawdown",
+    "انخفاض": "drawdown",
+    "ربح": "profit",
+    "أرباح": "profit",
+    "خسارة": "loss",
+    "خسائر": "loss",
+    "ذهب": "gold",
+    "عملات مشفرة": "crypto",
+    "العملات الرقمية": "crypto",
+    "عملة رقمية": "crypto",
+    "كريبتو": "crypto",
+    "بيتكوين": "bitcoin crypto",
+    "صكوك": "sukuk",
+    "شريعة": "shariah",
+    "شرعي": "shariah",
+    "العقود الآجلة": "futures",
+    "عقود مستقبلية": "futures",
+    "خيارات": "options",
+    "رافعة": "leverage",
+    "هامش": "margin",
+    "البيع على المكشوف": "short selling",
+    "تداول": "trading",
+    "حجم المركز": "position size",
+    "وقف الخسارة": "stop loss",
+    "تطهير": "purification",
+    "فتوى": "fatwa",
+    "قمار": "gambling",
+    "ميسر": "gambling",
+    "صندوق": "fund etf",
+    "صناديق": "fund etf",
+    "ديون": "debt",
+    "تضخم": "inflation",
+    "تنويع": "diversification diversified",
+    "سعر": "price",
+    "سوق": "market",
+    "اختبار رجعي": "backtest",
+    "استراتيجية": "strategy",
+    "خوف": "fear",
+    "جشع": "greed",
+    "مليون": "million",
+}
+
+_NO_MODEL_NOTE = {
+    "ur": "مکمل ترجمے کے لیے مقامی ماڈل (Ollama) درکار ہے\u06d4 "
+    "نیچے انگریزی اقتباسات دیے گئے ہیں\u06d4",
+    "ar": "الترجمة الكاملة تتطلب نموذجًا محليًا (Ollama). فيما يلي المقتطفات باللغة الإنجليزية.",
+}
+_NOT_COVERED = {
+    "en": "That is not covered in the knowledge base yet.",
+    "ur": "یہ موضوع ابھی نالج بیس میں شامل نہیں ہے\u06d4",
+    "ar": "هذا الموضوع غير مشمول في قاعدة المعرفة بعد.",
+}
+_NO_SIGNALS = {
+    "ur": "میں ٹریڈنگ سمجھاتا ہوں؛ ذاتی خرید و فروخت کا مشورہ نہیں دیتا\u06d4 فیصلے قواعد پر مبنی "
+    "پائپ لائن (شرعی گیٹ، رسک انجن) کرتی ہے\u06d4",
+    "ar": "أنا أشرح التداول ولا أقدم توصيات شخصية بالشراء أو البيع. القرارات يتخذها خط "
+    "القواعد (البوابة الشرعية ومحرك المخاطر).",
+}
+_LANG_NAMES = {"ur": "Urdu", "ar": "Arabic", "en": "English"}
+
+_KB_CACHE: dict[Path, tuple[tuple[tuple[str, float], ...], KnowledgeBase]] = {}
+
+
+def load_knowledge_base(docs: Path) -> KnowledgeBase:
+    """KnowledgeBase for ``docs``, cached per path and rebuilt when a markdown file changes."""
+
+    root = docs.resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"knowledge folder not found: {docs}")
+    signature = tuple(
+        (p.relative_to(root).as_posix(), p.stat().st_mtime)
+        for p in sorted(root.glob("**/*.md"))
+        if p.is_file()
+    )
+    cached = _KB_CACHE.get(root)
+    if cached is not None and cached[0] == signature:
+        return cached[1]
+    kb = KnowledgeBase.from_directory(root)
+    _KB_CACHE[root] = (signature, kb)
+    return kb
+
+
+def detect_language(text: str) -> str:
+    """'ur', 'ar' or 'en' from the script; Urdu and Arabic are told apart by their letters."""
+
+    if not _ARABIC_SCRIPT.search(text):
+        return "en"
+    urdu = len(_URDU_ONLY.findall(text))
+    arabic = len(_ARABIC_ONLY.findall(text))
+    return "ur" if urdu > 0 and urdu >= arabic else "ar"
+
+
+def glossary_translate(question: str) -> str:
+    """English retrieval query from glossary terms (longest first) plus any Latin words."""
+
+    terms: list[str] = []
+    remaining = question
+    for key in sorted(GLOSSARY, key=len, reverse=True):
+        if key in remaining:
+            terms.append(GLOSSARY[key])
+            remaining = remaining.replace(key, " ")
+    terms.extend(_LATIN_WORD.findall(question))
+    return " ".join(dict.fromkeys(" ".join(terms).split()))
+
+
+def _env_llm() -> Generate | None:
+    model = os.environ.get("QUANT_OS_OLLAMA_MODEL", "").strip()
+    return ollama_generate(model) if model else None
+
+
+def _llm_text(llm: Generate, system: str, user: str) -> str:
+    reply = llm([{"role": "system", "content": system}, {"role": "user", "content": user}])
+    return _THINK.sub("", reply).strip()
+
+
+def _source_list(answer: Answer) -> list[dict[str, str]]:
+    return [{"source": c.source, "heading": c.heading} for c in answer.sources]
+
+
+def _with_note(target: str, answer: Answer) -> dict[str, Any]:
+    text = f"{_NO_MODEL_NOTE[target]}\n{answer.text}"
+    return {"answer": text, "sources": _source_list(answer), "lang": target}
+
+
+def answer_multilingual(
+    question: str,
+    lang: str = "en",
+    *,
+    docs: Path = Path("docs/knowledge"),
+    llm: Generate | None = None,
+    env_model: bool = True,
+) -> dict[str, Any]:
+    """Answer in English, Urdu or Arabic from the knowledge base.
+
+    Retrieval is always in English. For Urdu or Arabic, a local model (``llm``, else Ollama
+    when ``QUANT_OS_OLLAMA_MODEL`` is set) translates the question in and the cited answer
+    back; without a model the glossary builds the query and the English passages are
+    returned with a note in the user's language. The answer language is ``lang`` if it is
+    'ur' or 'ar', otherwise the question's script. ``env_model=False`` never reads the
+    environment (quote-only mode). Returns ``{"answer", "sources", "lang"}``.
+    """
+
+    if lang not in LANGUAGES:
+        raise ValueError(f"lang must be one of {LANGUAGES}")
+    detected = detect_language(question)
+    target = lang if lang != "en" else detected
+    model = llm if llm is not None else (_env_llm() if env_model else None)
+    kb = load_knowledge_base(docs)
+
+    if target == "en":
+        answer = KnowledgeChatbot(kb, model).ask(question)
+        return {"answer": answer.text, "sources": _source_list(answer), "lang": "en"}
+    if _SIGNAL_REQUEST_UR_AR.search(question) or _SIGNAL_REQUEST.search(question):
+        return {"answer": _NO_SIGNALS[target], "sources": [], "lang": target}
+
+    english = question if detected == "en" else ""
+    if not english and model is not None:
+        try:
+            english = _llm_text(
+                model,
+                f"Translate the user's {_LANG_NAMES[detected]} question into English. "
+                "Reply with the English question only.",
+                question,
+            )
+        except Exception:  # model offline: the glossary still gives a usable query
+            english = ""
+    if not english:
+        english = glossary_translate(question)
+    if not english.strip():
+        return {"answer": _NOT_COVERED[target], "sources": [], "lang": target}
+
+    answer = KnowledgeChatbot(kb, model).ask(english)
+    if answer.refused:
+        return {"answer": _NOT_COVERED[target], "sources": [], "lang": target}
+    if model is None or not answer.grounded:
+        return _with_note(target, answer)
+    try:
+        translated = _llm_text(
+            model,
+            f"Translate the text into {_LANG_NAMES[target]}. Keep every citation such as [1] "
+            "exactly as written. Do not add advice, numbers or claims.",
+            answer.text,
+        )
+    except Exception:  # translation failed: English answer, flagged in the user's language
+        translated = ""
+    if not translated or set(_CITATION.findall(translated)) != set(_CITATION.findall(answer.text)):
+        return _with_note(target, answer)
+    return {"answer": translated, "sources": _source_list(answer), "lang": target}

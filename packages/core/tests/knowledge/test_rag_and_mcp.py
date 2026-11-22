@@ -37,6 +37,12 @@ def test_chunking_keeps_headings_and_splits_long_sections() -> None:
         ("are futures halal IIFA", "05-halal-rules.md"),
         ("look-ahead survivorship bias", "03-strategies-and-backtesting.md"),
         ("bid ask spread slippage", "01-trading-basics.md"),
+        ("edge hunt holdout PBO deflated sharpe gate fail", "07-research-findings.md"),
+        ("bootstrap chance $50 reaches $1M", "07-research-findings.md"),
+        ("leverage liquidated bitcoin survive 30 days", "07-research-findings.md"),
+        ("look-through N-PORT holdings UMMA coverage", "08-fund-screening.md"),
+        ("zakat nisab lunar year", "09-calculators-zakat.md"),
+        ("drawdown recovery gain needed", "09-calculators-zakat.md"),
     ],
 )
 def test_retrieval_finds_the_right_file(kb: KnowledgeBase, query: str, source: str) -> None:
@@ -87,6 +93,16 @@ def test_mcp_modern_discover_list_and_call(kb: KnowledgeBase) -> None:
         "position_size",
         "growth_projection",
         "deposit_projection",
+        "bot_status",
+        "explain_decision",
+        "screening_results",
+        "signals",
+        "reward_risk",
+        "zakat",
+        "purification",
+        "drawdown_recovery",
+        "currency_convert",
+        "knowledge_ask",
     }
 
     def tool(name: str, **arguments: object) -> dict:  # type: ignore[type-arg]

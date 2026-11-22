@@ -12,25 +12,39 @@ proposal passes the full rule pipeline. See ``mcp_board_tools`` and ``mcp_http``
 
 Run:  python -m quant_os_core.mcp_server --docs docs --state state/board.db
       python -m quant_os_core.mcp_server --docs docs --state state/board.db --http 127.0.0.1:8765
+      add --state-db state/core.db --screening examples/paper_core.json for the read-only
+      status, decision, screening and signal tools.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
+import importlib
 import json
 import math
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, TextIO
 
 from quant_os_core.agents.board import AgentBoard
 from quant_os_core.agents.profit_engine import RiskDial, deposit_plan
+from quant_os_core.agents.signals import (
+    LAST_REBALANCE_KEY,
+    MAX_SCREEN_AGE,
+    SIGNAL_TITLE,
+    Signal,
+    load_screening,
+    summarize,
+)
 from quant_os_core.instruments import AssetClass, Instrument, InstrumentId, InstrumentType
-from quant_os_core.knowledge.rag import KnowledgeBase
+from quant_os_core.knowledge.rag import LANGUAGES, KnowledgeBase, answer_multilingual
 from quant_os_core.mcp_board_tools import BOARD_TOOLS, BoardTools, ToolError, decimal_arg
-from quant_os_core.shariah import CryptoAsset, ShariahGate, ShariahProfile
+from quant_os_core.ops.state import StateStore
+from quant_os_core.shariah import CompanyFinancials, CryptoAsset, ShariahGate, ShariahProfile
 
 SERVER_INFO = {"name": "quant-os", "version": "0.3.0"}
 MODERN_VERSIONS = ("2026-07-28",)
@@ -47,6 +61,8 @@ INSTRUCTIONS = (
 )
 
 JSON = dict[str, Any]
+Rates = Callable[[str, str], Decimal]  # units of the target currency per unit of the source
+Generate = Callable[[Sequence[dict[str, str]]], str]
 
 
 _decimal = decimal_arg
@@ -137,13 +153,240 @@ TOOLS: list[JSON] = [
     },
 ]
 
+_READ_ONLY = {"readOnlyHint": True, "destructiveHint": False}
+_POSITIVE: JSON = {"type": "number", "exclusiveMinimum": 0}
+_NON_NEGATIVE: JSON = {"type": "number", "minimum": 0}
+
+# Read-only tools over the bot's state, screening, signals, calculators and multilingual
+# knowledge. None of them writes anywhere; a missing data source is a tool error.
+ADVANCED_TOOLS: list[JSON] = [
+    {
+        "name": "bot_status",
+        "description": "Paper bot status from the state store: equity, peak, drawdown, open "
+        "positions, pending orders, kill switch and last core rebalance. Read only.",
+        "inputSchema": {"type": "object", "properties": {}},
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "explain_decision",
+        "description": "The latest pipeline decisions with every gate stage (passed or "
+        "blocked, and why). Optionally filter by symbol. Read only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "screening_results",
+        "description": "Shariah screening per fund: look-through financials, AAOIFI ratio "
+        "verdict, source and age of the data (stale after 120 days). Read only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"symbol": {"type": "string"}},
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "signals",
+        "description": "Current diversified-core signals (rebalance due, drift, 200-day trend "
+        "crossings, stale screens). Information only; nothing executes from them.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"lang": {"type": "string", "enum": list(LANGUAGES), "default": "en"}},
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "reward_risk",
+        "description": "Reward-to-risk multiple R = (target - entry) / (entry - stop) for a "
+        "long trade, and the break-even win rate 1 / (1 + R) before costs.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"entry": _POSITIVE, "stop": _POSITIVE, "target": _POSITIVE},
+            "required": ["entry", "stop", "target"],
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "zakat",
+        "description": "Zakat at 2.5% of net zakatable wealth when it reaches the nisab you "
+        "supply (gold or silver basis). General calculation, not a fatwa.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cash": _NON_NEGATIVE,
+                "gold_silver": _NON_NEGATIVE,
+                "investments": _NON_NEGATIVE,
+                "receivables": _NON_NEGATIVE,
+                "debts_due": _NON_NEGATIVE,
+                "nisab": _POSITIVE,
+            },
+            "required": ["nisab"],
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "purification",
+        "description": "Amount of income to give away: dividend x non-compliant revenue / "
+        "total revenue, or non-compliant income / shares outstanding x shares held (AAOIFI "
+        "SS21). Not a fatwa.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dividend": _NON_NEGATIVE,
+                "noncompliant_revenue": _NON_NEGATIVE,
+                "total_revenue": _POSITIVE,
+                "noncompliant_income": _NON_NEGATIVE,
+                "shares_outstanding": _POSITIVE,
+                "shares_held": _NON_NEGATIVE,
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "drawdown_recovery",
+        "description": "Gain needed to recover from a drawdown: d / (1 - d). Give drawdown as "
+        "a fraction (0.3 for -30%) or give peak and current equity.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "drawdown": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+                "peak": _POSITIVE,
+                "current": _POSITIVE,
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "currency_convert",
+        "description": "Convert an amount between currencies with the configured rates "
+        "provider, or with an explicit rate (target units per source unit). Numbers only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "amount": _NON_NEGATIVE,
+                "from": {"type": "string", "minLength": 3, "maxLength": 3},
+                "to": {"type": "string", "minLength": 3, "maxLength": 3},
+                "rate": _POSITIVE,
+            },
+            "required": ["amount", "from", "to"],
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "knowledge_ask",
+        "description": "Ask the knowledge base in English, Urdu or Arabic. Answers cite their "
+        "sources; with no local model, Urdu/Arabic questions get the English passages and a "
+        "note. Never gives buy or sell calls.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "minLength": 2},
+                "lang": {"type": "string", "enum": list(LANGUAGES), "default": "en"},
+            },
+            "required": ["question"],
+        },
+        "annotations": _READ_ONLY,
+    },
+]
+
+_PCT = Decimal("0.01")
+
+
+def _tool_errors(
+    handler: Callable[[Mapping[str, Any]], str],
+) -> Callable[[Mapping[str, Any]], str]:
+    """Report bad input or unreadable data as a tool error instead of an internal error."""
+
+    @functools.wraps(handler)
+    def wrapped(args: Mapping[str, Any]) -> str:
+        try:
+            return handler(args)
+        except ToolError:
+            raise
+        except (ValueError, KeyError, TypeError, ArithmeticError, OSError) as exc:
+            raise ToolError(f"{type(exc).__name__}: {exc}") from exc
+
+    return wrapped
+
+
+def _external(module: str, name: str) -> Callable[..., Any] | None:
+    """A function from an optional sibling module (e.g. ops.calculators), if installed."""
+
+    try:
+        found = importlib.import_module(f"quant_os_core.ops.{module}")
+    except ImportError:
+        return None
+    candidate = getattr(found, name, None)
+    return candidate if callable(candidate) else None
+
+
+def _calc(name: str, field: str, *args: Decimal) -> Decimal | None:
+    """One figure from the shared ``ops.calculators`` function when it is installed.
+
+    Returns ``None`` (use the local formula) if the module, the function or the field is
+    missing, or if it rejects the input, so both give the same answer either way.
+    """
+
+    function = _external("calculators", name)
+    if function is None:
+        return None
+    try:
+        return Decimal(str(function(*args)[field]))
+    except Exception:
+        return None
+
+
+def cached_fx_rates(cache_path: Path = Path("state/fx_rates.json")) -> Rates | None:
+    """Read-only rates from ``ops.fx``'s saved table: never fetches, never writes."""
+
+    fx = importlib.import_module("quant_os_core.ops.fx") if _external("fx", "FxService") else None
+    if fx is None:
+        return None
+
+    def no_fetch(_url: str) -> Any:
+        raise OSError("the MCP server does not download rates")
+
+    def rate(source: str, target: str) -> Decimal:
+        service = fx.FxService(fetch=no_fetch, cache_path=cache_path)
+        return Decimal(str(service.rates().rate(source, target)))
+
+    return rate
+
+
+def _optional_decimal(args: Mapping[str, Any], key: str) -> Decimal:
+    return _decimal(args, key) if args.get(key) is not None else Decimal(0)
+
 
 class QuantOsMcp:
-    def __init__(self, kb: KnowledgeBase | None, board: BoardTools | None = None) -> None:
+    def __init__(
+        self,
+        kb: KnowledgeBase | None,
+        board: BoardTools | None = None,
+        *,
+        docs: Path | None = None,
+        store: StateStore | None = None,
+        screening: Path | None = None,
+        signals: Callable[[], Sequence[Signal]] | None = None,
+        rates: Rates | None = None,
+        llm: Generate | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.kb = kb
         self.board = board
+        self.docs = docs
+        self.store = store
+        self.screening = screening
+        self.signals_provider = signals
+        self.rates = rates
+        self.llm = llm
+        self.clock = clock
         self.legacy_version: str | None = None
-        self.tools: list[JSON] = [*TOOLS, *(BOARD_TOOLS if board else [])]
+        self.tools: list[JSON] = [*TOOLS, *ADVANCED_TOOLS, *(BOARD_TOOLS if board else [])]
         self._tools: dict[str, Callable[[Mapping[str, Any]], str]] = {
             "knowledge_search": self._knowledge_search,
             "shariah_check": self._shariah_check,
@@ -151,8 +394,247 @@ class QuantOsMcp:
             "growth_projection": self._growth_projection,
             "deposit_projection": self._deposit_projection,
         }
+        advanced: dict[str, Callable[[Mapping[str, Any]], str]] = {
+            "bot_status": self._bot_status,
+            "explain_decision": self._explain_decision,
+            "screening_results": self._screening_results,
+            "signals": self._signals,
+            "reward_risk": self._reward_risk,
+            "zakat": self._zakat,
+            "purification": self._purification,
+            "drawdown_recovery": self._drawdown_recovery,
+            "currency_convert": self._currency_convert,
+            "knowledge_ask": self._knowledge_ask,
+        }
+        self._tools.update({name: _tool_errors(fn) for name, fn in advanced.items()})
         if board is not None:
             self._tools.update(board.handlers())
+
+    # ---- read-only state tools -----------------------------------------------------------
+    def _need_store(self) -> StateStore:
+        if self.store is None:
+            raise ToolError("state store not configured; start the server with --state-db")
+        return self.store
+
+    def _bot_status(self, _args: Mapping[str, Any]) -> str:
+        store = self._need_store()
+        curve = store.equity_curve()
+        status: JSON = {
+            "kill_switch": "on" if store.kill_switch_on() else "off",
+            "last_rebalance": store.get_value(LAST_REBALANCE_KEY) or None,
+            "pending_orders": len(store.pending()),
+        }
+        if curve:
+            when, equity = curve[-1]
+            peak = max(e for _, e in curve)
+            drawdown = (peak - equity) / peak * 100 if peak > 0 else Decimal(0)
+            status.update(
+                equity=str(equity),
+                peak_equity=str(peak),
+                drawdown_pct=str(drawdown.quantize(_PCT)),
+                as_of=when.isoformat(),
+            )
+        else:
+            status["equity"] = None
+        status["positions"] = [
+            {
+                "symbol": s.position.plan.symbol,
+                "asset_class": s.asset_class,
+                "quantity": str(s.position.quantity),
+                "entry": str(s.position.plan.entry_price),
+                "stop": str(s.position.stop),
+                "target": str(s.position.plan.profit_target),
+            }
+            for s in store.open_positions()
+        ]
+        return json.dumps(status)
+
+    def _explain_decision(self, args: Mapping[str, Any]) -> str:
+        store = self._need_store()
+        limit = max(1, min(20, int(args.get("limit", 5))))
+        symbol = str(args.get("symbol", "")).strip().upper()
+        rows = store.recent("decisions", 500 if symbol else limit)
+        if symbol:
+            rows = [r for r in rows if str(r["symbol"]).upper() == symbol][:limit]
+        if not rows:
+            return "No decisions recorded yet."
+        out = [
+            {
+                "time": r["time"],
+                "symbol": r["symbol"],
+                "verdict": "approved" if r["approved"] else f"blocked at {r['blocked_by']}",
+                "quantity": r["quantity"],
+                "stages": json.loads(r["stages"]),
+            }
+            for r in rows
+        ]
+        return json.dumps(out)
+
+    def _screening_results(self, args: Mapping[str, Any]) -> str:
+        if self.screening is None:
+            raise ToolError("screening config not configured; start with --screening")
+        records = load_screening(self.screening)
+        wanted = str(args.get("symbol", "")).strip().upper()
+        today = self.clock().date()
+        gate = ShariahGate(ShariahProfile())
+        out = []
+        for symbol, record in sorted(records.items()):
+            if wanted and symbol != wanted:
+                continue
+            item: JSON = {"symbol": symbol, "source": record.source or None}
+            if record.financials is None:
+                item.update(verdict="blocked (R6): no financials on file", stale=True)
+                out.append(item)
+                continue
+            numbers = {k: Decimal(v) for k, v in record.financials.items() if k != "sector"}
+            financials = CompanyFinancials(sector=record.financials.get("sector", ""), **numbers)
+            decision = gate.screen_company(financials)
+            cap = financials.market_cap
+            item["ratios"] = {
+                "interest_debt_to_market_cap": f"{financials.interest_bearing_debt / cap:.2%}",
+                "interest_cash_to_market_cap": (
+                    f"{financials.interest_bearing_cash_and_securities / cap:.2%}"
+                ),
+                "noncompliant_revenue": (
+                    f"{financials.noncompliant_revenue / financials.total_revenue:.2%}"
+                ),
+                "tangible_assets": f"{financials.tangible_assets / financials.total_assets:.2%}",
+            }
+            item["verdict"] = (
+                "pass" if decision.allowed else f"blocked ({decision.rule_id}): {decision.reason}"
+            )
+            age = (today - record.as_of).days if record.as_of else None
+            item.update(
+                as_of=record.as_of.isoformat() if record.as_of else None,
+                age_days=age,
+                stale=age is None or age > MAX_SCREEN_AGE.days,
+            )
+            out.append(item)
+        if not out:
+            raise ToolError(f"no screening record for {wanted or 'any fund'}")
+        return json.dumps(out)
+
+    def _signals(self, args: Mapping[str, Any]) -> str:
+        lang = str(args.get("lang", "en"))
+        if lang not in LANGUAGES:
+            raise ToolError(f"lang must be one of {list(LANGUAGES)}")
+        if self.signals_provider is not None:
+            current = list(self.signals_provider())
+            body = {"summary": summarize(current, lang), "signals": [s.as_dict() for s in current]}
+            return json.dumps(body, ensure_ascii=False)
+        if self.store is not None:  # latest summary the signal agent sent to the store sink
+            prefix = f"{SIGNAL_TITLE}:"
+            for event in self.store.recent("events", 500):
+                if event["kind"] == "alert" and str(event["message"]).startswith(prefix):
+                    return f"latest published at {event['time']}:\n{event['message']}"
+            return "No signals published yet."
+        raise ToolError("signals not configured; start with --state-db")
+
+    # ---- calculators ---------------------------------------------------------------------
+    def _reward_risk(self, args: Mapping[str, Any]) -> str:
+        entry, stop, target = (_decimal(args, k) for k in ("entry", "stop", "target"))
+        if min(entry, stop, target) <= 0:
+            raise ToolError("entry, stop and target must be positive")
+        if not stop < entry < target:
+            raise ToolError("long-only: need stop < entry < target")
+        shared = _calc("reward_risk", "reward_risk", entry, stop, target)
+        multiple = shared if shared is not None else (target - entry) / (entry - stop)
+        breakeven = 1 / (1 + multiple) * 100
+        return (
+            f"reward:risk {multiple:.2f}R (risk {entry - stop:.2f}, reward {target - entry:.2f} "
+            f"per unit); break-even win rate {breakeven:.1f}% before costs"
+        )
+
+    def _zakat(self, args: Mapping[str, Any]) -> str:
+        nisab = _decimal(args, "nisab")
+        parts = {
+            k: _optional_decimal(args, k)
+            for k in ("cash", "gold_silver", "investments", "receivables", "debts_due")
+        }
+        if nisab <= 0 or any(v < 0 for v in parts.values()):
+            raise ToolError("nisab must be positive and amounts non-negative")
+        net = sum((v for k, v in parts.items() if k != "debts_due"), Decimal(0))
+        net -= parts["debts_due"]
+        note = "General calculation, not a fatwa; confirm the method with a scholar."
+        if net < nisab:
+            return f"net zakatable wealth {net:.2f} is below the nisab {nisab:.2f}: zakat 0. {note}"
+        shared = _calc("zakat", "due", net, nisab)
+        due = shared if shared is not None else net * Decimal("0.025")
+        return f"net zakatable wealth {net:.2f}; zakat at 2.5% = {due:.2f}. {note}"
+
+    def _purification(self, args: Mapping[str, Any]) -> str:
+        note = "Give it to charity; it is not zakat. Not a fatwa."
+        if args.get("dividend") is not None:
+            dividend = _decimal(args, "dividend")
+            bad, total = _decimal(args, "noncompliant_revenue"), _decimal(args, "total_revenue")
+            if total <= 0 or dividend < 0 or bad < 0 or bad > total:
+                raise ToolError("need dividend >= 0 and 0 <= noncompliant_revenue <= total_revenue")
+            shared = _calc("purification", "purify", dividend, bad / total * 100)
+            amount = shared if shared is not None else dividend * bad / total
+            return f"purify {amount:.2f} of the {dividend:.2f} dividend ({bad / total:.2%}). {note}"
+        if args.get("noncompliant_income") is not None:
+            income = _decimal(args, "noncompliant_income")
+            shares, held = _decimal(args, "shares_outstanding"), _decimal(args, "shares_held")
+            if shares <= 0 or held < 0 or income < 0:
+                raise ToolError("need shares_outstanding > 0, shares_held >= 0, income >= 0")
+            return f"purify {income / shares * held:.4f} (AAOIFI SS21 3/4/6/4). {note}"
+        raise ToolError("give dividend + revenues, or noncompliant_income + share counts")
+
+    def _drawdown_recovery(self, args: Mapping[str, Any]) -> str:
+        if args.get("drawdown") is not None:
+            drawdown = _decimal(args, "drawdown")
+        elif args.get("peak") is not None and args.get("current") is not None:
+            peak, current = _decimal(args, "peak"), _decimal(args, "current")
+            if peak <= 0 or current <= 0 or current > peak:
+                raise ToolError("need 0 < current <= peak")
+            drawdown = (peak - current) / peak
+        else:
+            raise ToolError("give drawdown (fraction) or peak and current")
+        if not Decimal(0) <= drawdown < 1:
+            raise ToolError("drawdown must be a fraction in [0, 1)")
+        shared = _calc("drawdown_recovery", "required_gain_pct", drawdown * 100)
+        needed = shared if shared is not None else drawdown / (1 - drawdown) * 100
+        return f"a {drawdown:.2%} drawdown needs a {needed:.2f}% gain to recover"
+
+    def _rate(self, source: str, target: str) -> Decimal:
+        if self.rates is None:
+            raise ToolError("no rates provider configured; pass 'rate' explicitly")
+        try:
+            return Decimal(str(self.rates(source, target)))
+        except Exception as exc:  # offline, unknown currency, no saved table
+            raise ToolError(f"rates unavailable: {exc}") from exc
+
+    def _currency_convert(self, args: Mapping[str, Any]) -> str:
+        amount = _decimal(args, "amount")
+        source = str(args.get("from", "")).strip().upper()
+        target = str(args.get("to", "")).strip().upper()
+        if amount < 0 or len(source) != 3 or len(target) != 3:
+            raise ToolError("need amount >= 0 and 3-letter currency codes")
+        if source == target:
+            rate = Decimal(1)
+        elif args.get("rate") is not None:
+            rate = _decimal(args, "rate")
+        else:
+            rate = self._rate(source, target)
+        if rate <= 0:
+            raise ToolError("rate must be positive")
+        return f"{amount} {source} = {amount * rate:.2f} {target} at {rate} {target}/{source}"
+
+    def _knowledge_ask(self, args: Mapping[str, Any]) -> str:
+        if self.docs is None:
+            raise ToolError("knowledge folder not configured; start the server with --docs")
+        question = str(args.get("question", "")).strip()
+        if len(question) < 2:
+            raise ToolError("'question' is required")
+        lang = str(args.get("lang", "en"))
+        if lang not in LANGUAGES:
+            raise ToolError(f"lang must be one of {list(LANGUAGES)}")
+        reply = answer_multilingual(question, lang, docs=self.docs, llm=self.llm)
+        sources = "\n".join(
+            f"  [{i}] {s['source']} - {s['heading']}"
+            for i, s in enumerate(reply["sources"], start=1)
+        )
+        return f"{reply['answer']}\n{sources}".rstrip()
 
     # ---- tools -------------------------------------------------------------------------
     def _knowledge_search(self, args: Mapping[str, Any]) -> str:
@@ -333,7 +815,15 @@ class QuantOsMcp:
                 stdout.flush()
 
 
-def build_server(docs: Path, state: Path | None, paper_equity: str, dial: str) -> QuantOsMcp:
+def build_server(
+    docs: Path,
+    state: Path | None,
+    paper_equity: str,
+    dial: str,
+    *,
+    state_db: Path | None = None,
+    screening: Path | None = None,
+) -> QuantOsMcp:
     kb = KnowledgeBase.from_directory(docs) if docs.is_dir() else None
     if kb is None:
         print(f"quant-os mcp: docs folder {docs} not found; search disabled", file=sys.stderr)
@@ -342,7 +832,20 @@ def build_server(docs: Path, state: Path | None, paper_equity: str, dial: str) -
         if state is not None
         else None
     )
-    return QuantOsMcp(kb, board)
+    store = None
+    if state_db is not None:
+        if state_db.is_file():  # never create a trading-state file from here
+            store = StateStore(state_db)
+        else:
+            print(f"quant-os mcp: state db {state_db} not found; status disabled", file=sys.stderr)
+    return QuantOsMcp(
+        kb,
+        board,
+        docs=docs if kb is not None else None,
+        store=store,
+        screening=screening,
+        rates=cached_fx_rates(),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -352,8 +855,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--paper-equity", default="50")
     parser.add_argument("--dial", default="balanced", choices=[d.value for d in RiskDial])
     parser.add_argument("--http", metavar="HOST:PORT", help="serve Streamable HTTP instead")
+    parser.add_argument("--state-db", type=Path, help="paper loop StateStore (read only)")
+    parser.add_argument("--screening", type=Path, help="config with fund financials")
     args = parser.parse_args(argv)
-    server = build_server(args.docs, args.state, args.paper_equity, args.dial)
+    server = build_server(
+        args.docs,
+        args.state,
+        args.paper_equity,
+        args.dial,
+        state_db=args.state_db,
+        screening=args.screening,
+    )
     if args.http:
         from quant_os_core.mcp_http import serve_http
 

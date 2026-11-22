@@ -190,6 +190,54 @@ def test_alpaca_adapter_maps_orders_idempotently_and_refuses_live() -> None:
         AlpacaPaperBroker("k", "s", base_url="https://api.alpaca.markets")
 
 
+def test_alpaca_adapter_sends_notional_buys_and_uses_the_smallest_cash_figure() -> None:
+    from quant_os_core.execution.models import BrokerOrderRequest
+    from quant_os_core.ops.alpaca_paper import settled_cash
+
+    fake = FakeAlpaca()
+    posted: list[dict[str, object]] = []
+
+    def http(method: str, url: str, headers: Mapping[str, str], body: bytes | None):  # type: ignore[no-untyped-def]
+        if method == "POST":
+            data = json.loads(body or b"{}")
+            posted.append(data)
+            body = json.dumps({"qty": "0", **data}).encode()  # Alpaca fills in qty later
+        return fake(method, url, headers, body)
+
+    broker = AlpacaPaperBroker("k", "s", http=http)
+    assert broker.supports_notional
+    iid = InstrumentId(venue="ALPACA", symbol="SPUS")
+    buy = BrokerOrderRequest(
+        client_order_id="n-1",
+        instrument_id=iid,
+        side=OrderSide.BUY,
+        quantity=Decimal("2.5"),
+        notional=Decimal("101.25"),
+    )
+    broker.submit(buy)
+    assert posted[0]["notional"] == "101.25" and "qty" not in posted[0]
+    assert posted[0]["type"] == "market" and posted[0]["time_in_force"] == "day"
+    sell = BrokerOrderRequest(
+        client_order_id="q-1", instrument_id=iid, side=OrderSide.SELL, quantity=Decimal("1.5")
+    )
+    broker.submit(sell)
+    assert posted[1]["qty"] == "1.5" and "notional" not in posted[1]
+    with pytest.raises(ValueError, match="notional"):
+        BrokerOrderRequest(
+            client_order_id="bad",
+            instrument_id=iid,
+            side=OrderSide.BUY,
+            quantity=Decimal("1"),
+            order_type="limit",
+            limit_price=Decimal("10"),
+            notional=Decimal("10"),
+        )
+    # settled cash: the smaller of cash and non-marginable buying power, never margin
+    assert settled_cash({"cash": "500", "non_marginable_buying_power": "320.5"}) == Decimal("320.5")
+    assert settled_cash({"cash": "200", "non_marginable_buying_power": "900"}) == Decimal("200")
+    assert settled_cash({"cash": "75", "buying_power": "300"}) == Decimal("75")
+
+
 # ---- orders ----
 def test_entry_orders_never_chase() -> None:
     iid = InstrumentId(venue="X", symbol="AAPL")

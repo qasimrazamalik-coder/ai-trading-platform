@@ -136,6 +136,7 @@ def _core_rebalancer(config: dict[str, Any], store: StateStore) -> CoreRebalance
         mode=CoreMode(core.get("mode", "defensive")),
         band=Decimal(str(core.get("band", "0.02"))),
         min_notional=Decimal(str(core.get("min_notional", "1.00"))),
+        invest_new_cash_immediately=bool(core.get("invest_new_cash_immediately", False)),
     )
 
 

@@ -101,3 +101,95 @@ def test_depth_drops_far_off_levels() -> None:
     }
     d = analytics.depth("BTC/USD", lambda _s: book)
     assert d["bids"] == [[100, 1]] and d["asks"] == [[101, 1]]
+
+
+def test_dashboard_calculators_fx_i18n_and_ask(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from quant_os_core.knowledge import rag
+    from quant_os_core.ops.fx import FxService
+
+    monkeypatch.delenv("QUANT_OS_OLLAMA_MODEL", raising=False)
+    monkeypatch.delattr(rag, "answer_multilingual", raising=False)
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "risk.md").write_text("# Stop loss\nA stop loss limits the loss on one trade.\n")
+    store = StateStore(tmp_path / "t.db")
+    payload = {"result": "success", "base_code": "USD", "rates": {"USD": 1, "PKR": 280}}
+    fx = FxService(lambda _url: payload, tmp_path / "fx.json")
+    httpd = ThreadingHTTPServer(
+        ("127.0.0.1", 0), make_handler(store, "x" * 20, fx=fx, knowledge_dir=kb)
+    )
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+    def call(path: str, body: Any = None, raw: bytes | None = None) -> tuple[int, Any]:
+        data = raw if raw is not None else (None if body is None else json.dumps(body).encode())
+        req = urllib.request.Request(base + path, data=data, method="POST" if data else "GET")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read() or b"{}")
+
+    try:
+        code, out = call(
+            "/api/calc/position_size", {"equity": 10000, "risk_pct": 1, "entry": 50, "stop": 47.5}
+        )
+        assert code == 200 and out["shares"] == "40"
+        assert call("/api/calc/position_size", {"equity": "x"})[0] == 400
+        assert call("/api/calc/nope", {})[0] == 404
+        assert call("/api/calc/zakat", raw=b"{not json")[0] == 400
+        assert call("/api/calc/zakat", raw=b"{" + b" " * 20_000 + b"}")[0] == 413
+        code, rates = call("/api/fx?base=USD")
+        assert code == 200 and rates["rates"]["PKR"] == "280"
+        assert call("/api/fx?base=ZZZ")[0] == 400
+        code, conv = call("/api/fx/convert?amount=2&from=USD&to=PKR")
+        assert code == 200 and Decimal(conv["converted"]) == Decimal("560")
+        code, ur = call("/api/i18n?lang=ur")
+        assert code == 200 and ur["dir"] == "rtl" and ur["strings"]["tab_calc"] == "کیلکولیٹر"
+        code, reply = call("/api/ask", {"question": "stop loss on one trade", "lang": "en"})
+        assert code == 200 and reply["sources"] == ["risk.md - Stop loss"]
+        assert "limits the loss" in reply["answer"]
+        assert call("/api/ask", {"question": ""})[0] == 400
+        assert call("/api/ask", {"question": "x" * 1001})[0] == 400
+        monkeypatch.setattr(
+            rag,
+            "answer_multilingual",
+            lambda q, lang: {"answer": f"{lang}:{q}", "sources": ["s"]},
+            raising=False,
+        )
+        assert call("/api/ask", {"question": "hi", "lang": "ar"})[1] == {
+            "answer": "ar:hi",
+            "sources": ["s"],
+        }
+        page = urllib.request.urlopen(base + "/", timeout=5).read().decode()
+        assert 'id="lang"' in page and "/api/calc/" in page and "SpeechRecognition" in page
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_dashboard_ask_returns_503_when_knowledge_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from quant_os_core.knowledge import rag
+
+    monkeypatch.delenv("QUANT_OS_OLLAMA_MODEL", raising=False)
+    monkeypatch.delattr(rag, "answer_multilingual", raising=False)
+    store = StateStore(tmp_path / "t.db")
+    handler = make_handler(store, "x" * 20, knowledge_dir=tmp_path / "missing")
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{httpd.server_address[1]}/api/ask",
+        data=b'{"question": "zakat"}',
+        method="POST",
+    )
+    try:
+        with pytest.raises(urllib.error.HTTPError) as err:
+            urllib.request.urlopen(req, timeout=5)
+        assert err.value.code == 503
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
