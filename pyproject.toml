@@ -81,6 +81,7 @@ module = [
   "statsmodels.*",
   "torch.*",
   "xgboost.*",
+  "yfinance.*",
 ]
 ignore_missing_imports = true
 

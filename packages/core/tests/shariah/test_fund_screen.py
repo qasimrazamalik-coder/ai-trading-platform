@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+
 from quant_os_core.shariah.fund_screen import (
     CompanyData,
     FundHoldings,
